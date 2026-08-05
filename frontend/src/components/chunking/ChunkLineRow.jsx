@@ -3,22 +3,10 @@ import React, { useState } from 'react';
 // 💅 고양이 할퀴기 Keyframes 애니메이션
 const clawStyles = `
   @keyframes clawSlashAnimation {
-    0% {
-      opacity: 0;
-      transform: scale(0.3) rotate(-25deg);
-    }
-    20% {
-      opacity: 1;
-      transform: scale(1.15) rotate(-15deg);
-    }
-    70% {
-      opacity: 1;
-      transform: scale(1) rotate(-15deg);
-    }
-    100% {
-      opacity: 0;
-      transform: scale(1.05) translate(-20px, 10px) rotate(-10deg);
-    }
+    0% { opacity: 0; transform: scale(0.3) rotate(-25deg); }
+    20% { opacity: 1; transform: scale(1.15) rotate(-15deg); }
+    70% { opacity: 1; transform: scale(1) rotate(-15deg); }
+    100% { opacity: 0; transform: scale(1.05) translate(-20px, 10px) rotate(-10deg); }
   }
 
   @keyframes sparkFlash {
@@ -57,8 +45,31 @@ const clawStyles = `
   }
 `;
 
+// 🎨 간단한 마크다운 인라인 뷰어 헬퍼
+const renderFormattedText = (text) => {
+  if (!text) return null;
+
+  let formatted = text;
+  const isHeader = /^#{1,6}\s/.test(text);
+  if (isHeader) {
+    formatted = formatted.replace(/^#{1,6}\s/, '');
+  }
+
+  const parts = formatted.split(/(\*\*.*?\*\*)/g);
+
+  return (
+    <span style={{ fontWeight: isHeader ? '700' : 'normal', color: isHeader ? '#1e40af' : '#0f172a' }}>
+      {parts.map((part, i) => {
+        if (part.startsWith('**') && part.endsWith('**')) {
+          return <strong key={i} style={{ color: '#0f172a', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
+        }
+        return part;
+      })}
+    </span>
+  );
+};
+
 const styles = {
-  // 📄 페이지 구분 헤더 바 스타일
   pageGroupHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -104,14 +115,25 @@ const styles = {
   }),
   textInput: {
     flex: 1,
-    border: 'none',
-    backgroundColor: 'transparent',
+    border: '1px solid #3b82f6',
+    borderRadius: '4px',
+    backgroundColor: '#ffffff',
     fontSize: '13px',
     fontFamily: 'inherit',
     color: '#0f172a',
     outline: 'none',
     padding: '3px 6px',
     fontWeight: '500'
+  },
+  textPreview: {
+    flex: 1,
+    fontSize: '13px',
+    padding: '3px 6px',
+    cursor: 'pointer',
+    borderRadius: '4px',
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-all',
+    userSelect: 'none'
   },
   badge: {
     fontSize: '11px',
@@ -165,26 +187,24 @@ const styles = {
 function ChunkLineRow({
   line,
   actualIdx,
-  isFirstLineOfPage, // 👈 [추가] 해당 페이지의 첫 번째 라인 여부 (boolean)
+  isFirstLineOfPage,
   activePage,
   setActivePage,
   handleTextChange,
   insertLineAbove,
   deleteLine,
-  deletePageLines,   // 👈 [추가] 페이지 전체 라인 일괄 삭제 함수
+  deletePageLines,
   toggleSplit
 }) {
   const [isScratching, setIsScratching] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
 
   const isActivePage = line.page_number && line.page_number === activePage;
 
   const handleBoundaryClick = () => {
     setIsScratching(true);
     toggleSplit(actualIdx);
-
-    setTimeout(() => {
-      setIsScratching(false);
-    }, 450);
+    setTimeout(() => setIsScratching(false), 450);
   };
 
   const handlePageClick = (e) => {
@@ -194,13 +214,10 @@ function ChunkLineRow({
     }
   };
 
-  // 🗑️ 페이지 전체 라인 삭제 버튼 클릭
   const handleDeletePage = (e) => {
     e.stopPropagation();
     if (window.confirm(`페이지 ${line.page_number || 1}의 모든 라인을 삭제하시겠습니까?`)) {
-      if (deletePageLines) {
-        deletePageLines(line.page_number || 1);
-      }
+      if (deletePageLines) deletePageLines(line.page_number || 1);
     }
   };
 
@@ -208,7 +225,7 @@ function ChunkLineRow({
     <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
       <style>{clawStyles}</style>
 
-      {/* 📄 [페이지 구분 헤더]: 각 페이지의 첫 번째 라인 상단에만 표시 */}
+      {/* 페이지 구분 헤더 */}
       {isFirstLineOfPage && (
         <div style={styles.pageGroupHeader}>
           <span>📄 PAGE {line.page_number || 1}</span>
@@ -225,7 +242,7 @@ function ChunkLineRow({
       {/* 라인 아이템 바디 */}
       <div 
         style={styles.rowContainer(isActivePage)}
-        onClick={() => line.page_number && setActivePage(line.page_number)}
+        onClick={() => line.page_number && setActivePage(line.page_number)} // 🎯 단일 클릭 시 PDF 즉시 이동
       >
         <button 
           style={styles.btnAction} 
@@ -235,12 +252,27 @@ function ChunkLineRow({
           ➕
         </button>
 
-        <input
-          type="text"
-          value={line.text || ''}
-          onChange={(e) => handleTextChange(line.line_index, e.target.value)}
-          style={styles.textInput}
-        />
+        {/* 🎯 [수정]: 더블 클릭(onDoubleClick)할 때만 편집 입력창으로 전환 */}
+        {isEditing ? (
+          <input
+            type="text"
+            autoFocus
+            value={line.text || ''}
+            onChange={(e) => handleTextChange(line.line_index, e.target.value)}
+            onBlur={() => setIsEditing(false)}
+            onKeyDown={(e) => { if (e.key === 'Enter') setIsEditing(false); }}
+            onClick={(e) => e.stopPropagation()} // 입력창 내부 클릭 시 부모 클릭 방지
+            style={styles.textInput}
+          />
+        ) : (
+          <div 
+            style={styles.textPreview} 
+            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }} // 👈 더블 클릭으로 변경!
+            title="단일 클릭: PDF 이동 / 더블 클릭: 텍스트 수정"
+          >
+            {renderFormattedText(line.text)}
+          </div>
+        )}
 
         <span style={styles.badge}>L:{actualIdx + 1}</span>
 
@@ -261,7 +293,7 @@ function ChunkLineRow({
         </button>
       </div>
 
-      {/* ✂️ 청크 경계선 */}
+      {/* 청크 경계선 */}
       <div 
         style={styles.splitBoundaryLine(line.is_split_point)}
         onClick={handleBoundaryClick}
