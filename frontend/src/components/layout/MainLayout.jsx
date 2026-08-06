@@ -12,7 +12,8 @@ const layoutStyles = {
     overflow: 'hidden',
     backgroundColor: '#f8fafc',
     margin: 0,
-    padding: 0
+    padding: 0,
+    boxSizing: 'border-box'
   },
   // 2. 상단 헤더 영역
   headerArea: {
@@ -28,7 +29,8 @@ const layoutStyles = {
     display: 'flex',
     width: '100%',
     overflow: 'hidden',
-    position: 'relative'
+    position: 'relative',
+    minHeight: 0 // 👈 [추가]: Flex 자식 높이 오버플로우 방지 핵심
   },
   // 4. 메인 콘텐츠 출력 영역
   contentArea: {
@@ -37,7 +39,8 @@ const layoutStyles = {
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    minHeight: 0 // 👈 [추가]: Flex 자식 높이 오버플로우 방지 핵심
   }
 };
 

@@ -62,38 +62,54 @@ const styles = {
   })
 };
 
-function Sidebar({ currentMenu = 'chunking', setCurrentMenu }) {
+function Sidebar(props) {
+  // currentMenu 또는 activeTab 프롭스 호환 처리
+  const activeMenu = props.currentMenu || props.activeTab || 'chunking';
+  const setMenuHandler = props.setCurrentMenu || props.setActiveTab;
+
+  const handleMenuClick = (menuId) => {
+    if (setMenuHandler) {
+      setMenuHandler(menuId);
+    }
+  };
+
   return (
     <aside style={styles.sidebarContainer}>
       <div style={styles.menuList}>
+        {/* 1. 스마트 청킹 매니저 */}
         <button
-          style={styles.menuItem(currentMenu === 'chunking')}
-          onClick={() => setCurrentMenu && setCurrentMenu('chunking')}
+          type="button"
+          style={styles.menuItem(activeMenu === 'chunking')}
+          onClick={() => handleMenuClick('chunking')}
         >
-          {currentMenu === 'chunking' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(currentMenu === 'chunking')}>
+          {activeMenu === 'chunking' && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'chunking')}>
             ⚡
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>스마트 청킹 매니저</span>
         </button>
 
+        {/* 2. 🖼️ 이미지 청킹 매니저 (버그 조건문 수정 완료) */}
         <button
-          style={styles.menuItem(currentMenu === 'img_chunking')}
-          onClick={() => setCurrentMenu && setCurrentMenu('img_chunking')}
+          type="button"
+          style={styles.menuItem(activeMenu === 'img_chunking')}
+          onClick={() => handleMenuClick('img_chunking')}
         >
-          {currentMenu === 'history' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(currentMenu === 'img_chunking')}>
-            🧬
+          {activeMenu === 'img_chunking' && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'img_chunking')}>
+            🖼️
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>이미지 청킹 매니저</span>
         </button>
 
+        {/* 3. RAG 연동 설정 */}
         <button
-          style={styles.menuItem(currentMenu === 'settings')}
-          onClick={() => setCurrentMenu && setCurrentMenu('settings')}
+          type="button"
+          style={styles.menuItem(activeMenu === 'settings')}
+          onClick={() => handleMenuClick('settings')}
         >
-          {currentMenu === 'settings' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(currentMenu === 'settings')}>
+          {activeMenu === 'settings' && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'settings')}>
             ⚙️
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>RAG 연동 설정</span>

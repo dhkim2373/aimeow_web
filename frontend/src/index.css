@@ -45,20 +45,22 @@
   }
 }
 
-/* 🌟 [수정 핵심]: 글로벌 박스 사이징 선언 및 강제 적용 */
+/* 🌟 [수정 핵심]: 글로벌 박스 사이징 및 마진/패딩 초기화 */
 *, *:before, *:after {
   box-sizing: border-box !important;
+  margin: 0;
+  padding: 0;
 }
 
-/* 🌟 [수정 핵심]: 100vw -> 100% 수정 및 외곽 스크롤바 원천 차단 */
-html, body, #root {
+/* 🌟 [수정 핵심]: html, body, #root, main 영역 세로/가로 스크롤 강제 원천 차단 */
+html, body, #root, main {
   margin: 0 !important;
   padding: 0 !important;
   width: 100% !important;
-  height: 100vh !important;
+  height: 100% !important;
   max-width: 100% !important;
   max-height: 100vh !important;
-  overflow: hidden !important; /* 👈 외곽 우측/하단 스크롤바 발생 원천 차단 */
+  overflow: hidden !important; /* 👈 브라우저 세로/가로 스크롤바 차단 */
   background-color: var(--bg);
 }
 

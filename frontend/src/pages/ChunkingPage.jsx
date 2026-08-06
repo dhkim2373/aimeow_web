@@ -8,7 +8,7 @@ import { uploadPdfApi, saveChunksApi } from '../api/chunkingApi';
 const styles = {
   fullContainer: {
     width: '100%',
-    height: '100%', 
+    height: '100%',        // 👈 100vh 사용 금지, 100% 사용
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
@@ -20,8 +20,8 @@ const styles = {
     boxSizing: 'border-box',
     border: 'none', 
     flex: 1,
-    height: '100%',            // 👈 100% 지정
-    minHeight: 0,              // 👈 Flex 자식 높이 넘침 방지 핵심
+    height: '100%',
+    minHeight: 0,          // 👈 Flex 자식 높이 오버플로우 방지 핵심
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
