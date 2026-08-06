@@ -81,3 +81,23 @@ export const saveChunksApi = async (globalPrefix, chunks) => {
 
   return response.json();
 };
+
+/**
+ * 5. 서버 연동 설정(Target REST API URL / Bearer Token) 저장 요청
+ */
+export const saveServerConfigApi = async (targetApiUrl, apiKey) => {
+  const response = await fetch(`${API_BASE_URL}/api/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      target_api_url: targetApiUrl,
+      api_key: apiKey
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error("서버 연동 설정 저장에 실패했습니다.");
+  }
+
+  return await response.json();
+};

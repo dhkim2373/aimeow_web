@@ -3,6 +3,7 @@ import uvicorn
 import shutil
 import os
 import time
+import json  # 👈 [수정] json 모듈 import 추가
 import requests
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +33,7 @@ def get_db_connection():
     return psycopg.connect(**DB_CONFIG)
 
 app = FastAPI()
+CONFIG_FILE_PATH = "./server_config.json"
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,6 +42,15 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============================================================
+# 🎯 Pydantic 데이터 모델 정의
+# ============================================================
+
+# 👈 [수정] 설정 저장용 Pydantic 모델 추가 (함수보다 위에 선언)
+class ConfigRequest(BaseModel):
+    target_api_url: str
+    api_key: str
 
 class ChunkItem(BaseModel):
     line_index: str
@@ -53,6 +64,20 @@ class SaveRequest(BaseModel):
     source_filename: Optional[str] = "DIRECT_INPUT" # 🎯 원본 파일명
     chunks: List[ChunkItem]
 
+class ChunkLine(BaseModel):
+    line_index: str
+    page_number: Optional[int] = 1
+    text: str
+    is_split_point: Optional[bool] = False
+    is_deleted: Optional[bool] = False
+
+class WebhookPayload(BaseModel):
+    user_name: Optional[str] = "SYSTEM"
+    global_prefix: Optional[str] = ""
+    source_filename: Optional[str] = "WEBHOOK_INPUT"
+    chunks: List[ChunkLine]
+
+
 # 임시 파일 저장소 생성
 UPLOAD_DIR = "./temp_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -65,7 +90,7 @@ def strip_markdown(text_content: str) -> str:
     if not text_content:
         return ""
     
-    # 🎯 [원복]: <br> 태그를 줄바꿈(\n)으로 강제 변환하지 않고 공백으로 정제
+    # 🎯 <br> 태그를 공백으로 정제
     text_content = re.sub(r'<br\s*/?>', ' ', text_content, flags=re.IGNORECASE)
     
     # 1. 헤더 기호 제거 (## 제목 -> 제목)
@@ -75,7 +100,7 @@ def strip_markdown(text_content: str) -> str:
     text_content = re.sub(r'\*\*([^*]+)\*\*?', r'\1', text_content)
     text_content = re.sub(r'\*([^*]+)\*', r'\1', text_content)
     
-    # 3. 마크다운 표(Table) 구범선(|---|---| 등) 제거
+    # 3. 마크다운 표(Table) 구분선(|---|---| 등) 제거
     text_content = re.sub(r'\|[\s\-\|]*\|', '', text_content)
     
     # 4. 표의 파이프 기호(|)를 공백으로 치환하여 텍스트 분리
@@ -84,6 +109,7 @@ def strip_markdown(text_content: str) -> str:
     # 5. 연속된 공백 및 줄바꿈 정제
     lines = [line.strip() for line in text_content.split('\n') if line.strip()]
     return "\n".join(lines)
+
 
 @app.post("/api/upload-pdf")
 def upload_pdf(file: UploadFile = File(...)):
@@ -121,7 +147,6 @@ def upload_pdf(file: UploadFile = File(...)):
             current_page_num = int(current_page_num) + 1
             page_text = page_chunk.get("text", "")
             
-            # 🎯 [원복]: <br> 태그를 줄바꿈으로 나누지 않고 원본 라인 개행(\n)만으로 파싱
             page_lines = [line.strip() for line in page_text.split('\n') if line.strip()]
             
             for line in page_lines:
@@ -144,20 +169,45 @@ def upload_pdf(file: UploadFile = File(...)):
             os.remove(file_path)
         raise HTTPException(status_code=500, detail=f"PDF 파싱 실패: {str(e)}")
 
-# 🎯 프론트엔드가 서버에 등록된 프로퍼티 설정값을 조회하는 API
+
+# 👈 [수정] 저장된 파일(server_config.json)을 최우선으로 읽고, 없으면 settings 기본값 반환
 @app.get("/api/config")
 def get_config():
+    if os.path.exists(CONFIG_FILE_PATH):
+        try:
+            with open(CONFIG_FILE_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception as e:
+            print(f"⚠️ 설정 파일 로드 오류: {e}")
+            
     return {
-        "target_api_url": settings.TARGET_REST_API_URL,
-        "api_key": settings.TARGET_REST_API_KEY
+        "target_api_url": getattr(settings, "TARGET_REST_API_URL", ""),
+        "api_key": getattr(settings, "TARGET_REST_API_KEY", "")
     }    
+
+
+# 👈 [수정] 프론트엔드 연동 설정 저장 API (POST)
+@app.post("/api/config")
+def save_config(config: ConfigRequest):
+    try:
+        data = {
+            "target_api_url": config.target_api_url,
+            "api_key": config.api_key
+        }
+        with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return {"status": "success", "message": "설정이 성공적으로 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"설정 저장 실패: {str(e)}")    
+
 
 # 💾 정제 완료 후 고객사 REST API로 데이터 전송
 @app.post("/api/save-chunks")
 def save_chunks(data: dict):
-    # 1. 전달받은 target_api_url이 없으면 서버 프로퍼티 기본값 사용
-    target_url = data.get("target_api_url") or settings.TARGET_REST_API_URL
-    api_key = data.get("api_key") or settings.TARGET_REST_API_KEY
+    # 1. 전달받은 target_api_url이 없으면 파일에 저장된 설정값 -> settings 기본값 순으로 사용
+    saved_config = get_config()
+    target_url = data.get("target_api_url") or saved_config.get("target_api_url")
+    api_key = data.get("api_key") or saved_config.get("api_key")
 
     # 2. 고객사 REST API로 정제된 청크 데이터 발송 (Webhook)
     if target_url:
@@ -173,18 +223,6 @@ def save_chunks(data: dict):
 
     return {"status": "success", "message": "저장되었습니다."}
 
-class ChunkLine(BaseModel):
-    line_index: str
-    page_number: Optional[int] = 1
-    text: str
-    is_split_point: Optional[bool] = False
-    is_deleted: Optional[bool] = False
-
-class WebhookPayload(BaseModel):
-    user_name: Optional[str] = "SYSTEM"
-    global_prefix: Optional[str] = ""
-    source_filename: Optional[str] = "WEBHOOK_INPUT"
-    chunks: List[ChunkLine]
 
 @app.post("/api/webhook/ingest")
 def webhook_ingest_chunks(payload: WebhookPayload):

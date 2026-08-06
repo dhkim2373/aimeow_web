@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchServerConfigApi } from '../api/chunkingApi';
+import { fetchServerConfigApi, saveServerConfigApi } from '../api/chunkingApi';
 
 const styles = {
   container: {
@@ -74,20 +74,28 @@ function SettingsPage() {
   const [targetApiUrl, setTargetApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
 
+  // 🎯 페이지 접속 시 FastAPI 서버로부터 최신 설정 로드
   useEffect(() => {
-    // 백엔드 프로퍼티 설정값 로드
-    fetchServerConfigApi().then(data => {
-      const savedUrl = localStorage.getItem('aimeow_target_api_url') || data.target_api_url || '';
-      const savedKey = localStorage.getItem('aimeow_api_key') || data.api_key || '';
-      setTargetApiUrl(savedUrl);
-      setApiKey(savedKey);
-    });
+    fetchServerConfigApi()
+      .then(data => {
+        if (data) {
+          setTargetApiUrl(data.target_api_url || '');
+          setApiKey(data.api_key || '');
+        }
+      })
+      .catch(err => {
+        console.error("서버 설정 로드 실패:", err);
+      });
   }, []);  
 
-  const handleSave = () => {
-    localStorage.setItem('aimeow_target_api_url', targetApiUrl.trim());
-    localStorage.setItem('aimeow_api_key', apiKey.trim());
-    alert("🐾 RAG Target REST API 연동 설정이 저장되었다냥!");
+  // 🎯 버튼 클릭 시 FastAPI 서버로 설정값 저장
+  const handleSave = async () => {
+    try {
+      await saveServerConfigApi(targetApiUrl.trim(), apiKey.trim());
+      alert("🐾 RAG Target REST API 연동 설정이 서버에 성공적으로 저장되었다냥!");
+    } catch (err) {
+      alert("⚠️ 서버에 설정을 저장하는 중 오류가 발생했습니다.");
+    }
   };
 
   return (

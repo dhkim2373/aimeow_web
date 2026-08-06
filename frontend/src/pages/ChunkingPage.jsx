@@ -11,51 +11,69 @@ const styles = {
     height: '100%', 
     display: 'flex',
     flexDirection: 'column',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    overflow: 'hidden'
   },
   mainCard: { 
     backgroundColor: '#ffffff', 
-    borderRadius: '0px', 
-    padding: '20px 24px 24px 24px', 
+    padding: '16px 20px', 
     boxSizing: 'border-box',
     border: 'none', 
     flex: 1,
+    height: '100%',            // 👈 100% 지정
+    minHeight: 0,              // 👈 Flex 자식 높이 넘침 방지 핵심
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden'
   },
-  pageHeader: {
+  // 🎯 [통합 헤더 바]: 타이틀 + 공통 헤더 + 유틸 버튼을 한 줄로 결합
+  compactHeaderSection: {
     display: 'flex',
     alignItems: 'center',
-    marginBottom: '18px',
-    paddingBottom: '12px',
-    borderBottom: '2px solid #f1f5f9',
-    flexShrink: 0
-  },
-  pageTitle: { 
-    margin: 0, 
-    fontSize: '22px', 
-    color: '#0f172a', 
-    fontWeight: '800', 
-    display: 'flex', 
-    alignItems: 'center', 
-    gap: '10px',
-    letterSpacing: '-0.5px'
-  },
-  globalPrefixSection: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
+    justifyContent: 'space-between',
     backgroundColor: '#f8fafc',
     border: '1px solid #cbd5e1',
     borderRadius: '12px',
-    padding: '12px 16px',
-    marginBottom: '14px',
-    flexShrink: 0
+    padding: '8px 16px',
+    marginBottom: '12px',
+    flexShrink: 0,
+    gap: '16px'
+  },
+  headerLeftGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px',
+    flex: 1
+  },
+  pageTitle: { 
+    margin: 0, 
+    fontSize: '18px', 
+    color: '#0f172a', 
+    fontWeight: '900', 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '6px',
+    letterSpacing: '-0.5px',
+    whiteSpace: 'nowrap'
+  },
+  verticalDivider: {
+    width: '1px',
+    height: '18px',
+    backgroundColor: '#cbd5e1'
+  },
+  globalPrefixLabel: {
+    fontSize: '13px',
+    fontWeight: '800',
+    color: '#1e293b',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    whiteSpace: 'nowrap'
   },
   globalPrefixInput: {
     flex: 1,
-    padding: '8px 14px',
+    maxWidth: '420px',
+    padding: '6px 12px',
     backgroundColor: '#ffffff',
     border: '1px solid #cbd5e1',
     borderRadius: '8px',
@@ -65,10 +83,11 @@ const styles = {
     outline: 'none',
     transition: 'border-color 0.2s'
   },
-  rightUtilArea: {
+  headerRightGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px'
+    gap: '12px',
+    whiteSpace: 'nowrap'
   },
   resetBtn: {
     display: 'flex',
@@ -220,12 +239,82 @@ function ChunkingPage() {
     setLines(prevLines => prevLines.filter(line => line.line_index !== lineIndexToDelete));
   };
 
-  // 🎯 [추가된 핵심 핸들러]: 특정 페이지의 모든 라인 일괄 삭제 (Ctrl+Z 지원)
+  // 특정 페이지의 모든 라인 일괄 삭제
   const deletePageLines = (targetPageNum) => {
     saveToHistory(lines);
     setLines(prevLines => 
       prevLines.filter(line => (line.page_number || 1) !== targetPageNum)
     );
+  };
+
+  // 페이지별 청킹 라인 자동 생성 핸들러 (마지막 라인 하단)
+  const chunkByPage = () => {
+    saveToHistory(lines);
+    setLines(prevLines => {
+      return prevLines.map((line, i) => {
+        const currentPage = line.page_number || 1;
+        const nextLine = prevLines[i + 1];
+        const nextPage = nextLine ? (nextLine.page_number || 1) : null;
+
+        const isLastLineOfPage = nextPage !== null && nextPage !== currentPage;
+
+        return {
+          ...line,
+          is_split_point: isLastLineOfPage
+        };
+      });
+    });
+  };
+
+  // 페이지별 상단 N줄 일괄 삭제 (헤더 제거)
+  const deleteTopNLinesPerPage = (topCount) => {
+    if (!topCount || topCount <= 0) return;
+    saveToHistory(lines);
+
+    setLines(prevLines => {
+      const pageMap = new Map();
+      prevLines.forEach(line => {
+        const pageNum = line.page_number || 1;
+        if (!pageMap.has(pageNum)) {
+          pageMap.set(pageNum, []);
+        }
+        pageMap.get(pageNum).push(line);
+      });
+
+      const filteredLines = [];
+      pageMap.forEach((pageLines) => {
+        const remaining = pageLines.slice(topCount);
+        filteredLines.push(...remaining);
+      });
+
+      return filteredLines;
+    });
+  };
+
+  // 페이지별 하단 N줄 일괄 삭제 (풋터 제거)
+  const deleteBottomNLinesPerPage = (bottomCount) => {
+    if (!bottomCount || bottomCount <= 0) return;
+    saveToHistory(lines);
+
+    setLines(prevLines => {
+      const pageMap = new Map();
+      prevLines.forEach(line => {
+        const pageNum = line.page_number || 1;
+        if (!pageMap.has(pageNum)) {
+          pageMap.set(pageNum, []);
+        }
+        pageMap.get(pageNum).push(line);
+      });
+
+      const filteredLines = [];
+      pageMap.forEach((pageLines) => {
+        const remainingCount = Math.max(0, pageLines.length - bottomCount);
+        const remaining = pageLines.slice(0, remainingCount);
+        filteredLines.push(...remaining);
+      });
+
+      return filteredLines;
+    });
   };
 
   const insertLineAbove = (index, currentLine) => {
@@ -269,15 +358,6 @@ function ChunkingPage() {
   return (
     <div style={styles.fullContainer}>
       <div style={styles.mainCard}>
-        {/* 페이지 타이틀 헤더 */}
-        <div style={styles.pageHeader}>
-          <h2 style={styles.pageTitle}>
-            <span style={{ fontSize: '26px' }}>🐾</span> 
-            <span style={{ color: '#2563eb', fontWeight: '900' }}>AI Meow</span> 
-            <span style={{ color: '#0f172a' }}>SOP 청킹 파이프라인</span>
-          </h2>
-        </div>
-        
         {/* Step 1: 업로드 */}
         {step === 'upload' && (
           <UploadBox onFileUpload={handleFileUpload} />
@@ -291,19 +371,30 @@ function ChunkingPage() {
         {/* Step 3: 스마트 청킹 스크래치 편집기 */}
         {step === 'editor' && (
           <>
-            <div style={styles.globalPrefixSection}>
-              <span style={{ fontSize: '13px', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                📌 공통 헤더:
-              </span>
-              <input 
-                type="text" 
-                placeholder="예: [SOP-IT-004] 정보보안 관리 규정 v1.0"
-                value={globalPrefix}
-                onChange={(e) => setGlobalPrefix(e.target.value)}
-                style={styles.globalPrefixInput}
-              />
-              
-              <div style={styles.rightUtilArea}>
+            {/* 🎯 [통합 헤더 바]: 화면 타이틀 + 공통 헤더 + 우측 유틸 한 줄로 배치 */}
+            <div style={styles.compactHeaderSection}>
+              <div style={styles.headerLeftGroup}>
+                <h2 style={styles.pageTitle}>
+                  <span style={{ fontSize: '22px' }}>🐾</span> 
+                  <span style={{ color: '#2563eb', fontWeight: '900' }}>AI Meow</span> 
+                  <span style={{ color: '#0f172a' }}>SOP 청킹 파이프라인</span>
+                </h2>
+
+                <div style={styles.verticalDivider} />
+
+                <span style={styles.globalPrefixLabel}>
+                  📌 공통 헤더:
+                </span>
+                <input 
+                  type="text" 
+                  placeholder="예: [SOP-IT-004] 정보보안 관리 규정 v1.0"
+                  value={globalPrefix}
+                  onChange={(e) => setGlobalPrefix(e.target.value)}
+                  style={styles.globalPrefixInput}
+                />
+              </div>
+
+              <div style={styles.headerRightGroup}>
                 <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
                   * 💡 실수했을 땐 **Ctrl + Z**로 원복 가능!
                 </span>
@@ -341,7 +432,10 @@ function ChunkingPage() {
                 handleTextChange={handleTextChange}
                 insertLineAbove={insertLineAbove}
                 deleteLine={deleteLine}
-                deletePageLines={deletePageLines} // 👈 🎯 [연결 완료] 페이지 일괄 삭제 함수 전달
+                deletePageLines={deletePageLines}
+                chunkByPage={chunkByPage}
+                deleteTopNLinesPerPage={deleteTopNLinesPerPage}
+                deleteBottomNLinesPerPage={deleteBottomNLinesPerPage}
                 toggleSplit={toggleSplit}
                 handleSave={handleSave}
               />

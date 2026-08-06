@@ -14,11 +14,62 @@ const styles = {
     flexDirection: 'column', 
     boxSizing: 'border-box'
   }),
+  pageChunkBtn: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: '3px 10px',
+    backgroundColor: '#eff6ff',
+    color: '#1d4ed8',
+    border: '1px solid #93c5fd',
+    borderRadius: '6px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    outline: 'none'
+  },
+  // 🧹 [신규]: 헤더/풋터 정리 툴바 전용 스타일
+  utilToolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#f8fafc',
+    border: '1px solid #e2e8f0',
+    borderRadius: '10px',
+    padding: '8px 12px',
+    marginTop: '6px',
+    marginBottom: '6px',
+    flexShrink: 0
+  },
+  numInput: {
+    width: '38px',
+    padding: '2px 4px',
+    fontSize: '12px',
+    textAlign: 'center',
+    border: '1px solid #cbd5e1',
+    borderRadius: '4px',
+    outline: 'none',
+    fontWeight: '600',
+    color: '#0f172a'
+  },
+  deleteActionBtn: {
+    padding: '3px 8px',
+    fontSize: '11px',
+    fontWeight: '700',
+    backgroundColor: '#fef2f2',
+    color: '#dc2626',
+    border: '1px solid #fecaca',
+    borderRadius: '4px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    outline: 'none'
+  },
   scrollList: {
     flex: 1,
     overflowY: 'auto',
     paddingRight: '6px',
-    marginTop: '10px',
+    marginTop: '6px',
     position: 'relative'
   },
   saveBtn: { 
@@ -43,14 +94,43 @@ function ChunkEditor({
   handleTextChange, 
   insertLineAbove, 
   deleteLine, 
-  deletePageLines, // 👈 [추가] 페이지 일괄 삭제 프롭스
+  deletePageLines,
+  chunkByPage, 
+  deleteTopNLinesPerPage,     // 👈 [추가]: 페이지별 상단 N줄 삭제 함수
+  deleteBottomNLinesPerPage,  // 👈 [추가]: 페이지별 하단 N줄 삭제 함수
   toggleSplit, 
   handleSave 
 }) {
   const scrollContainerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
 
-  // 기본 라인 높이 (페이지 헤더가 들어가면 고정 가상 스크롤 계산 시 동적 처리를 위해 고정값 유지)
+  // 🎯 [추가]: 헤더/풋터 일괄 삭제 줄 수 제어 상태
+  const [topCount, setTopCount] = useState(1);
+  const [bottomCount, setBottomCount] = useState(1);
+
+  // 상단 N줄 삭제 처리
+  const handleTopDelete = () => {
+    const count = Number(topCount);
+    if (count <= 0) return;
+    if (window.confirm(`모든 페이지의 상단 ${count}줄(헤더)을 일괄 삭제하시겠습니까?`)) {
+      if (deleteTopNLinesPerPage) {
+        deleteTopNLinesPerPage(count);
+      }
+    }
+  };
+
+  // 하단 N줄 삭제 처리
+  const handleBottomDelete = () => {
+    const count = Number(bottomCount);
+    if (count <= 0) return;
+    if (window.confirm(`모든 페이지의 하단 ${count}줄(풋터)을 일괄 삭제하시겠습니까?`)) {
+      if (deleteBottomNLinesPerPage) {
+        deleteBottomNLinesPerPage(count);
+      }
+    }
+  };
+
+  // 기본 라인 높이
   const ROW_HEIGHT = 38; 
   const BUFFER_COUNT = 15;
 
@@ -58,7 +138,7 @@ function ChunkEditor({
     setScrollTop(e.target.scrollTop);
   };
 
-  // 🎯 가상 스크롤 인덱스 및 위치 계산
+  // 가상 스크롤 인덱스 및 위치 계산
   const totalHeight = lines.length * ROW_HEIGHT;
   const containerHeight = 600; 
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_COUNT);
@@ -71,13 +151,77 @@ function ChunkEditor({
     <div style={styles.rightPanel(leftWidth)}>
       {/* 편집기 상단 툴바 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, marginBottom: '6px' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '12px', backgroundColor: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>EDIT</span>
           <h3 style={{ margin: 0, color: '#0f172a', fontSize: '14px', fontWeight: '700' }}>수동 청크 경계면 스크래치</h3>
+          
+          {/* 📄 페이지별 자동 청킹 버튼 */}
+          <button 
+            type="button"
+            style={styles.pageChunkBtn} 
+            onClick={chunkByPage}
+            title="페이지가 바뀌는 위치에 자동으로 청킹 구분 라인을 넣습니다."
+          >
+            📄 페이지별 청킹
+          </button>
         </div>
+
         <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
           ⚡ 슬림 컴팩트 뷰 (총 {lines.length}개 라인)
         </span>
+      </div>
+
+      {/* 🧹 [신규]: 헤더/풋터 일괄 정리 컨트롤 툴바 */}
+      <div style={styles.utilToolbar}>
+        <span style={{ fontSize: '12px', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+          🧹 헤더/풋터 정리:
+        </span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {/* 상단 N줄 삭제 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>페이지별 상단</span>
+            <input 
+              type="number" 
+              min="1" 
+              max="10" 
+              value={topCount}
+              onChange={(e) => setTopCount(e.target.value)}
+              style={styles.numInput}
+            />
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>줄</span>
+            <button 
+              type="button"
+              style={styles.deleteActionBtn}
+              onClick={handleTopDelete}
+            >
+              상단 삭제
+            </button>
+          </div>
+
+          <span style={{ color: '#cbd5e1', fontSize: '12px' }}>|</span>
+
+          {/* 하단 N줄 삭제 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>페이지별 하단</span>
+            <input 
+              type="number" 
+              min="1" 
+              max="10" 
+              value={bottomCount}
+              onChange={(e) => setBottomCount(e.target.value)}
+              style={styles.numInput}
+            />
+            <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>줄</span>
+            <button 
+              type="button"
+              style={styles.deleteActionBtn}
+              onClick={handleBottomDelete}
+            >
+              하단 삭제
+            </button>
+          </div>
+        </div>
       </div>
       
       {/* 가상 스크롤 리스트 영역 */}
@@ -100,14 +244,14 @@ function ChunkEditor({
                   key={line.line_index || actualIdx}
                   line={line}
                   actualIdx={actualIdx}
-                  isFirstLineOfPage={isFirstLineOfPage} // 👈 [추가] 페이지 전체 삭제 헤더 노출 여부
+                  isFirstLineOfPage={isFirstLineOfPage}
                   isLast={actualIdx === lines.length - 1}
                   activePage={activePage}
                   setActivePage={setActivePage}
                   handleTextChange={handleTextChange}
                   insertLineAbove={insertLineAbove}
                   deleteLine={deleteLine}
-                  deletePageLines={deletePageLines}     // 👈 [추가] 페이지 삭제 핸들러 전달
+                  deletePageLines={deletePageLines}
                   toggleSplit={toggleSplit}
                 />
               );

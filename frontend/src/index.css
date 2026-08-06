@@ -14,8 +14,8 @@
   
   --shadow: rgba(0, 0, 0, 0.05) 0 10px 15px -3px, rgba(0, 0, 0, 0.03) 0 4px 6px -2px;
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
+  --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 16px/145% var(--sans);
@@ -45,25 +45,30 @@
   }
 }
 
-html, body {
-  margin: 0;
-  padding: 0;
-  width: 100%;
-  height: 100%;
+/* 🌟 [수정 핵심]: 글로벌 박스 사이징 선언 및 강제 적용 */
+*, *:before, *:after {
+  box-sizing: border-box !important;
 }
 
-/* 🌟 [수정 핵심] 1126px 고정 폭과 margin: 0 auto를 박살내고 화면을 100% 확장합니다! */
+/* 🌟 [수정 핵심]: 100vw -> 100% 수정 및 외곽 스크롤바 원천 차단 */
+html, body, #root {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  height: 100vh !important;
+  max-width: 100% !important;
+  max-height: 100vh !important;
+  overflow: hidden !important; /* 👈 외곽 우측/하단 스크롤바 발생 원천 차단 */
+  background-color: var(--bg);
+}
+
 #root {
-  width: 100%;
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
-h1, h2 {
+/* 타이틀 및 폰트 서식 */
+h1, h2, h3, h4 {
   font-family: var(--heading);
   font-weight: 700;
   color: var(--text-h);
@@ -95,4 +100,23 @@ code {
   line-height: 135%;
   padding: 4px 8px;
   background: var(--code-bg);
+}
+
+/* 🎨 내부 영역 전용 슬림 웹킷 스크롤바 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
 }
