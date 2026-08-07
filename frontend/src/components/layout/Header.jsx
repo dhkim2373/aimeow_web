@@ -36,13 +36,35 @@ const styles = {
     fontWeight: '900',
     fontSize: '24px'
   },
-  userArea: { display: 'flex', alignItems: 'center', gap: '16px', fontSize: '14px', color: '#475569' },
-  topBtn: { background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', fontSize: '14px', padding: '6px 10px', borderRadius: '6px', fontWeight: '500' }
+  rightArea: { 
+    display: 'flex', 
+    alignItems: 'center', 
+    gap: '12px' 
+  },
+  engineBadge: {
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
+    fontSize: '12px',
+    fontWeight: '700',
+    padding: '6px 14px',
+    borderRadius: '20px',
+    border: '1px solid #cbd5e1',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px'
+  },
+  statusDot: {
+    width: '8px',
+    height: '8px',
+    backgroundColor: '#22c55e',
+    borderRadius: '50%'
+  }
 };
 
-function Header({ setCurrentMenu }) {
+function Header() {
   return (
     <header style={styles.topHeader}>
+      {/* 🐾 원본 고글 고양이 로고 이미지 & 서비스명 */}
       <div style={styles.logoArea}>
         <img 
           src={aiMeowLogo} 
@@ -53,10 +75,12 @@ function Header({ setCurrentMenu }) {
         <span style={{ color: '#0f172a', fontWeight: '800' }}>RAG 센터</span>
       </div>
 
-      <div style={styles.userArea}>
-        <span style={{ fontWeight: '600' }}>홍길동 대리 (인사팀)</span>
-        <button style={styles.topBtn} onClick={() => setCurrentMenu && setCurrentMenu('settings')}>⚙️ 설정</button>
-        <button style={{...styles.topBtn, color: '#ef4444'}} onClick={() => alert("로그아웃 되었습니다.")}>로그아웃</button>
+      {/* 🐾 우측 엔진 상태 및 버전 뱃지 */}
+      <div style={styles.rightArea}>
+        <div style={styles.engineBadge}>
+          <span style={styles.statusDot} />
+          <span>Engine v1.0.0</span>
+        </div>
       </div>
     </header>
   );

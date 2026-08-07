@@ -11,7 +11,12 @@ from typing import List, Optional
 from config import BASE_UPLOAD_DIR, get_db_connection
 from routers import settings, image_chunking, text_chunking
 
-app = FastAPI(title="AI Meow RAG Engine")
+app = FastAPI(
+    title="AI Meow Precision Chunking Engine",
+    docs_url=None,     # 👈 Swagger UI 접근 비활성화 (/docs 숨김)
+    redoc_url=None,    # 👈 Redoc 접근 비활성화 (/redoc 숨김)
+    openapi_url=None   # 👈 OpenAPI JSON 메타데이터 비활성화 (/openapi.json 숨김)
+)
 
 # ============================================================
 # 🌐 CORS 설정
