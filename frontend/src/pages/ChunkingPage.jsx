@@ -5,6 +5,14 @@ import PdfViewer from '../components/chunking/PdfViewer';
 import ChunkEditor from '../components/chunking/ChunkEditor';
 import { uploadPdfApi, saveChunksApi } from '../api/chunkingApi';
 
+// 🎯 [스마트 텍스트 청킹 전용 파이프라인 단계 정의]
+const textGuideSteps = [
+  { num: '01', title: '📄 규정 문서 업로드', desc: 'SOP PDF 문서 선택 및 파일 처리' },
+  { num: '02', title: '✂️ 세부 라인 파싱', desc: '문장/줄 단위 자동 구조화' },
+  { num: '03', title: '✏️ 청크 분할 & 정제', desc: '절단선 지정 및 오탈자/여백 편집' },
+  { num: '04', title: '💾 지식 DB 적재', desc: '정제 텍스트 데이터 Vector DB 저장' }
+];
+
 const styles = {
   fullContainer: {
     width: '100%',
@@ -12,7 +20,8 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    flex: 1
   },
   mainCard: { 
     backgroundColor: '#ffffff', 
@@ -20,6 +29,7 @@ const styles = {
     boxSizing: 'border-box',
     border: 'none', 
     flex: 1,
+    width: '100%',
     height: '100%',
     minHeight: 0,
     display: 'flex',
@@ -42,7 +52,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    flex: 1
+    flex: 1,
+    minWidth: 0
   },
   pageTitle: { 
     margin: 0, 
@@ -57,7 +68,8 @@ const styles = {
   verticalDivider: {
     width: '1px',
     height: '18px',
-    backgroundColor: '#cbd5e1'
+    backgroundColor: '#cbd5e1',
+    flexShrink: 0
   },
   globalPrefixLabel: {
     fontSize: '13px',
@@ -84,7 +96,8 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '12px',
-    whiteSpace: 'nowrap'
+    whiteSpace: 'nowrap',
+    flexShrink: 0
   },
   resetBtn: {
     display: 'flex',
@@ -115,7 +128,8 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center',
     zIndex: 10,
-    userSelect: 'none'
+    userSelect: 'none',
+    flexShrink: 0
   },
   resizerLine: { 
     width: '4px', 
@@ -239,7 +253,6 @@ function ChunkingPage() {
     );
   };
 
-  // 🎯 페이지별 마지막 라인 하단 절단선 배치
   const chunkByPage = () => {
     saveToHistory(lines);
     setLines(prevLines => {
@@ -258,7 +271,6 @@ function ChunkingPage() {
     });
   };
 
-  // 🎯 페이지별 상단 N줄 일괄 삭제
   const deleteTopNLinesPerPage = (topCount) => {
     if (!topCount || topCount <= 0) return;
     saveToHistory(lines);
@@ -283,7 +295,6 @@ function ChunkingPage() {
     });
   };
 
-  // 🎯 페이지별 하단 N줄 일괄 삭제
   const deleteBottomNLinesPerPage = (bottomCount) => {
     if (!bottomCount || bottomCount <= 0) return;
     saveToHistory(lines);
@@ -350,14 +361,23 @@ function ChunkingPage() {
   return (
     <div style={styles.fullContainer}>
       <div style={styles.mainCard}>
+        {/* Step 1: 업로드 (스마트 텍스트 청킹 전용 가이드 전달) */}
         {step === 'upload' && (
-          <UploadBox onFileUpload={handleFileUpload} />
+          <UploadBox 
+            onFileUpload={handleFileUpload} 
+            showGuide={true}
+            guideTitle="스마트 텍스트 청킹 작업 프로세스"
+            guideBadge="Text-to-RAG Pipeline"
+            guideSteps={textGuideSteps}
+          />
         )}
 
+        {/* Step 2: 로딩 */}
         {step === 'loading' && (
           <LoadingView />
         )}
 
+        {/* Step 3: 청킹 에디터 */}
         {step === 'editor' && (
           <>
             <div style={styles.compactHeaderSection}>
