@@ -26,10 +26,8 @@ const styles = {
     fontSize: '12px',
     fontWeight: '700',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
     outline: 'none'
   },
-  // 🧹 [신규]: 헤더/풋터 정리 툴바 전용 스타일
   utilToolbar: {
     display: 'flex',
     alignItems: 'center',
@@ -50,8 +48,7 @@ const styles = {
     border: '1px solid #cbd5e1',
     borderRadius: '4px',
     outline: 'none',
-    fontWeight: '600',
-    color: '#0f172a'
+    fontWeight: '600'
   },
   deleteActionBtn: {
     padding: '3px 8px',
@@ -62,7 +59,6 @@ const styles = {
     border: '1px solid #fecaca',
     borderRadius: '4px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
     outline: 'none'
   },
   scrollList: {
@@ -96,41 +92,33 @@ function ChunkEditor({
   deleteLine, 
   deletePageLines,
   chunkByPage, 
-  deleteTopNLinesPerPage,     // 👈 [추가]: 페이지별 상단 N줄 삭제 함수
-  deleteBottomNLinesPerPage,  // 👈 [추가]: 페이지별 하단 N줄 삭제 함수
+  deleteTopNLinesPerPage,
+  deleteBottomNLinesPerPage,
   toggleSplit, 
   handleSave 
 }) {
   const scrollContainerRef = useRef(null);
   const [scrollTop, setScrollTop] = useState(0);
 
-  // 🎯 [추가]: 헤더/풋터 일괄 삭제 줄 수 제어 상태
   const [topCount, setTopCount] = useState(1);
   const [bottomCount, setBottomCount] = useState(1);
 
-  // 상단 N줄 삭제 처리
   const handleTopDelete = () => {
     const count = Number(topCount);
     if (count <= 0) return;
     if (window.confirm(`모든 페이지의 상단 ${count}줄(헤더)을 일괄 삭제하시겠습니까?`)) {
-      if (deleteTopNLinesPerPage) {
-        deleteTopNLinesPerPage(count);
-      }
+      if (deleteTopNLinesPerPage) deleteTopNLinesPerPage(count);
     }
   };
 
-  // 하단 N줄 삭제 처리
   const handleBottomDelete = () => {
     const count = Number(bottomCount);
     if (count <= 0) return;
     if (window.confirm(`모든 페이지의 하단 ${count}줄(풋터)을 일괄 삭제하시겠습니까?`)) {
-      if (deleteBottomNLinesPerPage) {
-        deleteBottomNLinesPerPage(count);
-      }
+      if (deleteBottomNLinesPerPage) deleteBottomNLinesPerPage(count);
     }
   };
 
-  // 기본 라인 높이
   const ROW_HEIGHT = 38; 
   const BUFFER_COUNT = 15;
 
@@ -138,7 +126,6 @@ function ChunkEditor({
     setScrollTop(e.target.scrollTop);
   };
 
-  // 가상 스크롤 인덱스 및 위치 계산
   const totalHeight = lines.length * ROW_HEIGHT;
   const containerHeight = 600; 
   const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_COUNT);
@@ -149,13 +136,11 @@ function ChunkEditor({
 
   return (
     <div style={styles.rightPanel(leftWidth)}>
-      {/* 편집기 상단 툴바 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, marginBottom: '6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '12px', backgroundColor: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>EDIT</span>
           <h3 style={{ margin: 0, color: '#0f172a', fontSize: '14px', fontWeight: '700' }}>수동 청크 경계면 스크래치</h3>
           
-          {/* 📄 페이지별 자동 청킹 버튼 */}
           <button 
             type="button"
             style={styles.pageChunkBtn} 
@@ -171,14 +156,12 @@ function ChunkEditor({
         </span>
       </div>
 
-      {/* 🧹 [신규]: 헤더/풋터 일괄 정리 컨트롤 툴바 */}
       <div style={styles.utilToolbar}>
-        <span style={{ fontSize: '12px', fontWeight: '800', color: '#1e293b', display: 'flex', alignItems: 'center', gap: '4px' }}>
+        <span style={{ fontSize: '12px', fontWeight: '800', color: '#1e293b' }}>
           🧹 헤더/풋터 정리:
         </span>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          {/* 상단 N줄 삭제 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>페이지별 상단</span>
             <input 
@@ -201,7 +184,6 @@ function ChunkEditor({
 
           <span style={{ color: '#cbd5e1', fontSize: '12px' }}>|</span>
 
-          {/* 하단 N줄 삭제 */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '600' }}>페이지별 하단</span>
             <input 
@@ -224,7 +206,6 @@ function ChunkEditor({
         </div>
       </div>
       
-      {/* 가상 스크롤 리스트 영역 */}
       <div 
         ref={scrollContainerRef}
         onScroll={handleScroll}
@@ -235,7 +216,6 @@ function ChunkEditor({
             {visibleLines.map((line, relativeIdx) => {
               const actualIdx = startIndex + relativeIdx;
 
-              // 📄 [페이지 변경 감지]: 전체 lines 배열을 기준으로 이전 라인과 페이지 번호가 다른지 판단
               const prevLine = actualIdx > 0 ? lines[actualIdx - 1] : null;
               const isFirstLineOfPage = !prevLine || prevLine.page_number !== line.page_number;
 
@@ -260,7 +240,6 @@ function ChunkEditor({
         </div>
       </div>
 
-      {/* DB 적재 저장 버튼 */}
       <button style={styles.saveBtn} onClick={handleSave}>
         🐾 실타래 정제 완료 및 지식 DB에 적재하기 (전체 {lines.length}개 라인 저장)
       </button>

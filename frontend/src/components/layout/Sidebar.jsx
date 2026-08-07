@@ -57,13 +57,11 @@ const styles = {
     fontWeight: '800',
     backgroundColor: active ? '#2563eb' : '#f1f5f9',
     color: active ? '#ffffff' : '#64748b',
-    boxShadow: active ? '0 2px 6px rgba(37, 99, 235, 0.3)' : 'none',
     transition: 'all 0.2s ease'
   })
 };
 
 function Sidebar(props) {
-  // currentMenu 또는 activeTab 프롭스 호환 처리
   const activeMenu = props.currentMenu || props.activeTab || 'chunking';
   const setMenuHandler = props.setCurrentMenu || props.setActiveTab;
 
@@ -79,11 +77,11 @@ function Sidebar(props) {
         {/* 1. 스마트 청킹 매니저 */}
         <button
           type="button"
-          style={styles.menuItem(activeMenu === 'chunking')}
+          style={styles.menuItem(activeMenu === 'chunking' || activeMenu === 'smart-chunk')}
           onClick={() => handleMenuClick('chunking')}
         >
-          {activeMenu === 'chunking' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(activeMenu === 'chunking')}>
+          {(activeMenu === 'chunking' || activeMenu === 'smart-chunk') && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'chunking' || activeMenu === 'smart-chunk')}>
             ⚡
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>스마트 청킹 매니저</span>
@@ -92,11 +90,11 @@ function Sidebar(props) {
         {/* 2. 🖼️ 이미지 청킹 매니저 (버그 조건문 수정 완료) */}
         <button
           type="button"
-          style={styles.menuItem(activeMenu === 'img_chunking')}
+          style={styles.menuItem(activeMenu === 'img_chunking' || activeMenu === 'image-chunk')}
           onClick={() => handleMenuClick('img_chunking')}
         >
-          {activeMenu === 'img_chunking' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(activeMenu === 'img_chunking')}>
+          {(activeMenu === 'img_chunking' || activeMenu === 'image-chunk') && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'img_chunking' || activeMenu === 'image-chunk')}>
             🖼️
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>이미지 청킹 매니저</span>
@@ -105,11 +103,11 @@ function Sidebar(props) {
         {/* 3. RAG 연동 설정 */}
         <button
           type="button"
-          style={styles.menuItem(activeMenu === 'settings')}
+          style={styles.menuItem(activeMenu === 'settings' || activeMenu === 'rag-settings')}
           onClick={() => handleMenuClick('settings')}
         >
-          {activeMenu === 'settings' && <div style={styles.activeIndicator} />}
-          <div style={styles.iconBadge(activeMenu === 'settings')}>
+          {(activeMenu === 'settings' || activeMenu === 'rag-settings') && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'settings' || activeMenu === 'rag-settings')}>
             ⚙️
           </div>
           <span style={{ letterSpacing: '-0.3px' }}>RAG 연동 설정</span>

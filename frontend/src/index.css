@@ -1,21 +1,17 @@
 :root {
-  /* 🐾 aimeow 브랜드 컬러 시스템 적용 */
+  /* 🐾 aimeow 브랜드 컬러 시스템 */
   --text: #475569;
   --text-h: #0f172a;
   --bg: #f8fafc;
   --border: #e2e8f0;
   --code-bg: #f1f5f9;
   
-  /* 🤖 미오 블루 & 냥이 핑크 */
   --accent: #3b82f6; 
   --accent-pink: #ff7a93;
   --accent-bg: rgba(59, 130, 246, 0.08);
   --accent-border: rgba(59, 130, 246, 0.3);
   
-  --shadow: rgba(0, 0, 0, 0.05) 0 10px 15px -3px, rgba(0, 0, 0, 0.03) 0 4px 6px -2px;
-
   --sans: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   --mono: ui-monospace, Consolas, monospace;
 
   font: 16px/145% var(--sans);
@@ -23,102 +19,83 @@
   color-scheme: light dark;
   color: var(--text);
   background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 🐾 다크 모드 시 미오 다크 블루 감성으로 전환 */
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #94a3b8;
-    --text-h: #f8fafc;
-    --bg: #0f172a;
-    --border: #1e293b;
-    --code-bg: #1e293b;
-    --accent: #60a5fa;
-    --accent-pink: #f472b6;
-    --accent-bg: rgba(96, 165, 250, 0.15);
-    --accent-border: rgba(96, 165, 250, 0.4);
-    --shadow: rgba(0, 0, 0, 0.3) 0 10px 15px -3px, rgba(0, 0, 0, 0.2) 0 4px 6px -2px;
-  }
-}
-
-/* 🌟 [수정 핵심]: 글로벌 박스 사이징 및 마진/패딩 초기화 */
-*, *:before, *:after {
+/* 🌟 [글로벌 박스사이징 초기화] */
+*, *::before, *::after {
   box-sizing: border-box !important;
   margin: 0;
   padding: 0;
 }
 
-/* 🌟 [수정 핵심]: html, body, #root, main 영역 세로/가로 스크롤 강제 원천 차단 */
-html, body, #root, main {
+/* 🌟 [100% 원천 차단 핵심] 브라우저 메인 창 스크롤바 완전히 숨기기 */
+html, body {
   margin: 0 !important;
   padding: 0 !important;
   width: 100% !important;
   height: 100% !important;
   max-width: 100% !important;
   max-height: 100vh !important;
-  overflow: hidden !important; /* 👈 브라우저 세로/가로 스크롤바 차단 */
+  overflow: hidden !important;
+  position: fixed !important; /* 크롬 뷰포트 고정 */
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
   background-color: var(--bg);
+  
+  /* 파이어폭스 / IE 스크롤바 차단 */
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+/* 크롬, 사파리, Edge 브라우저 창 전용 스크롤바 트랙 완전 제거 */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }
 
 #root {
-  display: flex;
-  flex-direction: column;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100vh !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
 }
 
-/* 타이틀 및 폰트 서식 */
-h1, h2, h3, h4 {
-  font-family: var(--heading);
-  font-weight: 700;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 32px;
-  letter-spacing: -0.03em;
-  margin: 0;
-}
-
-h2 {
-  font-size: 20px;
-  line-height: 120%;
-  letter-spacing: -0.02em;
-  margin: 0 0 8px;
-}
-
-p {
-  margin: 0;
-}
-
-code {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 6px;
-  color: var(--text-h);
-  font-size: 14px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
-}
-
-/* 🎨 내부 영역 전용 슬림 웹킷 스크롤바 */
-::-webkit-scrollbar {
+/* 🎨 [내부 전용]: 청크 에디터, 갤러리 등 내부 스크롤바만 슬림 디자인 적용 */
+div::-webkit-scrollbar,
+textarea::-webkit-scrollbar,
+aside::-webkit-scrollbar,
+main::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 
-::-webkit-scrollbar-track {
+div::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track,
+aside::-webkit-scrollbar-track,
+main::-webkit-scrollbar-track {
   background: transparent;
 }
 
-::-webkit-scrollbar-thumb {
+div::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+aside::-webkit-scrollbar-thumb,
+main::-webkit-scrollbar-thumb {
   background: #cbd5e1;
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
+div::-webkit-scrollbar-thumb:hover,
+textarea::-webkit-scrollbar-thumb:hover,
+aside::-webkit-scrollbar-thumb:hover,
+main::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
+
