@@ -29,28 +29,17 @@
   padding: 0;
 }
 
-/* 🌟 [100% 원천 차단 핵심] 브라우저 메인 창 스크롤바 완전히 숨기기 */
-html, body {
+/* 🌟 [핵심] 100dvh로 세로 기준점 완벽 고정 + 최외곽 스크롤 차단 */
+html, body, #root {
+  width: 100% !important;
+  height: 100dvh !important;
   margin: 0 !important;
   padding: 0 !important;
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100vh !important;
   overflow: hidden !important;
-  position: fixed !important; /* 크롬 뷰포트 고정 */
-  top: 0 !important;
-  left: 0 !important;
-  right: 0 !important;
-  bottom: 0 !important;
   background-color: var(--bg);
-  
-  /* 파이어폭스 / IE 스크롤바 차단 */
-  scrollbar-width: none !important;
-  -ms-overflow-style: none !important;
 }
 
-/* 크롬, 사파리, Edge 브라우저 창 전용 스크롤바 트랙 완전 제거 */
+/* 크롬, 사파리, Edge 브라우저창 스크롤바 트랙 숨김 */
 html::-webkit-scrollbar,
 body::-webkit-scrollbar {
   display: none !important;
@@ -58,14 +47,10 @@ body::-webkit-scrollbar {
   height: 0 !important;
 }
 
-#root {
-  width: 100% !important;
-  height: 100% !important;
-  max-width: 100% !important;
-  max-height: 100vh !important;
-  overflow: hidden !important;
-  display: flex !important;
-  flex-direction: column !important;
+/* 파이어폭스 / IE 스크롤바 차단 */
+html, body {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
 }
 
 /* 🎨 [내부 전용]: 청크 에디터, 갤러리 등 내부 스크롤바만 슬림 디자인 적용 */
@@ -98,4 +83,3 @@ aside::-webkit-scrollbar-thumb:hover,
 main::-webkit-scrollbar-thumb:hover {
   background: #94a3b8;
 }
-

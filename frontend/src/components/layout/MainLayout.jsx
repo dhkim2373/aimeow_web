@@ -5,7 +5,7 @@ import Sidebar from './Sidebar';
 const layoutStyles = {
   appContainer: {
     width: '100%',
-    height: '100vh',
+    height: '100%', // #root의 100dvh를 100% 상속받아 화면 꽉 채움
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
@@ -22,12 +22,13 @@ const layoutStyles = {
     zIndex: 10
   },
   bodyArea: {
-    flex: 1,
+    flex: 1, // 헤더(60px) 제외 나머지 세로 화면 전체 차지
     display: 'flex',
     width: '100%',
     overflow: 'hidden',
     position: 'relative',
-    minHeight: 0
+    minHeight: 0,
+    minWidth: 0
   },
   contentArea: {
     flex: 1,
@@ -36,7 +37,8 @@ const layoutStyles = {
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
-    minHeight: 0
+    minHeight: 0,
+    minWidth: 0
   }
 };
 
