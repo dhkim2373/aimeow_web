@@ -1,23 +1,19 @@
 import os
 import re
 import json
-import psycopg
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# JSON 설정 파일 경로
+# JSON 설정 파일 경로 및 기본 업로드 경로
 CONFIG_FILE_PATH = "./server_config.json"
 BASE_UPLOAD_DIR = "uploads"
-
 
 class Settings:
     TARGET_REST_API_URL: str = os.getenv("TARGET_REST_API_URL", "")
     TARGET_REST_API_KEY: str = os.getenv("TARGET_REST_API_KEY", "")
-    # 🎯 외부/운영 이미지 서버 설정 추가
     IMAGE_UPLOAD_URL: str = os.getenv("IMAGE_UPLOAD_URL", "")
     IMAGE_SERVER_TOKEN: str = os.getenv("IMAGE_SERVER_TOKEN", "")
-
 
 settings = Settings()
 
@@ -48,27 +44,13 @@ def save_server_config(data: dict):
         with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
             
-        # 메모리 설정도 즉시 동기화
+        # 메모리 설정 즉시 동기화
         settings.TARGET_REST_API_URL = data.get("target_api_url", "")
         settings.TARGET_REST_API_KEY = data.get("api_key", "")
         settings.IMAGE_UPLOAD_URL = data.get("image_upload_url", "")
         settings.IMAGE_SERVER_TOKEN = data.get("image_server_token", "")
     except Exception as e:
         print(f"⚠️ server_config.json 저장 실패: {e}")
-
-
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "dbname": os.getenv("DB_NAME", "redbombz"),
-    "user": os.getenv("DB_USER", "redbombz"),
-    "password": os.getenv("DB_PASSWORD", "a11223344*"),
-    "port": int(os.getenv("DB_PORT", 5432))
-}
-
-
-def get_db_connection():
-    """PostgreSQL 데이터베이스 연결 객체 반환"""
-    return psycopg.connect(**DB_CONFIG)
 
 
 def get_user_workspace(user_id: str = "default_user", subfolder: str = "") -> str:
@@ -83,3 +65,11 @@ def get_user_workspace(user_id: str = "default_user", subfolder: str = "") -> st
     path = os.path.join(BASE_UPLOAD_DIR, safe_user_id, subfolder)
     os.makedirs(path, exist_ok=True)
     return path
+
+
+# 🐾 모듈 로드 시점에 저장된 JSON 설정값을 읽어 초기 메모리 settings 동기화
+_initial_config = load_server_config()
+settings.TARGET_REST_API_URL = _initial_config.get("target_api_url", settings.TARGET_REST_API_URL)
+settings.TARGET_REST_API_KEY = _initial_config.get("api_key", settings.TARGET_REST_API_KEY)
+settings.IMAGE_UPLOAD_URL = _initial_config.get("image_upload_url", settings.IMAGE_UPLOAD_URL)
+settings.IMAGE_SERVER_TOKEN = _initial_config.get("image_server_token", settings.IMAGE_SERVER_TOKEN)
