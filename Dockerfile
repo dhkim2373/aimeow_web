@@ -5,11 +5,9 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# 패키지 설치 최적화를 위한 package.json 복사
 COPY frontend/package*.json ./
 RUN npm install
 
-# 프론트엔드 소스 복사 및 빌드
 COPY frontend/ .
 RUN npm run build
 
@@ -20,14 +18,20 @@ FROM python:3.11-slim
 
 WORKDIR /app/backend
 
-# 시스템 필수 패키지 설치
+# 🐾 PDF/이미지 청킹 처리에 필요한 poppler 및 C/C++ 빌드 시스템 의존성 설치
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    gcc \
+    g++ \
+    poppler-utils \
+    libpoppler-cpp-dev \
+    pkg-config \
     && rm -rf /var/lib/apt/lists/*
 
-# 백엔드 의존성 설치
+# pip 최신화 및 백엔드 의존성 설치
 COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # 백엔드 소스코드 복사
 COPY backend/ .
@@ -38,8 +42,6 @@ COPY --from=frontend-builder /app/frontend/dist ./frontend_dist
 # 업로드 파일 저장을 위한 디렉터리 생성
 RUN mkdir -p uploads
 
-# 포트 노출
 EXPOSE 8100
 
-# FastAPI 서버 실행 (main:app)
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8100"]
