@@ -1,5 +1,11 @@
-// 백엔드 API 기본 URL (동적 호스트 처리)
-const API_BASE_URL = `http://${window.location.hostname}:8100`;
+/**
+ * 백엔드 API 기본 URL 설정
+ * 1. 단일 포트 운영(Docker/FastAPI통합) 시 상대 경로("") 사용
+ * 2. 분리 개발(Local Dev) 시 현재 호스트의 8100 포트 자동 추적
+ */
+const API_BASE_URL = window.location.port === '5173' 
+  ? `http://${window.location.hostname}:8100` 
+  : '';
 
 /**
  * 1. 백엔드 서버에 설정된 기본 프로퍼티(TARGET_REST_API_URL 등) 조회
@@ -13,7 +19,12 @@ export const fetchServerConfigApi = async () => {
     return await response.json();
   } catch (error) {
     console.warn("서버 설정 조회 중 오류 발생 (기본값 사용):", error);
-    return { target_api_url: "", api_key: "" };
+    return { 
+      target_api_url: "", 
+      api_key: "",
+      image_upload_url: "",
+      image_server_token: ""
+    };
   }
 };
 
@@ -33,11 +44,11 @@ export const uploadPdfApi = async (file) => {
     throw new Error("PDF 파싱 중 서버 오류가 발생했습니다.");
   }
 
-  return response.json();
+  return await response.json();
 };
 
 /**
- * 3. [추가] PDF 또는 문서 파일 업로드 시 파일 내 이미지 추출 요청
+ * 3. PDF 또는 문서 파일 업로드 시 파일 내 이미지 추출 요청
  */
 export const extractPdfImagesApi = async (file) => {
   const formData = new FormData();
@@ -52,7 +63,7 @@ export const extractPdfImagesApi = async (file) => {
     throw new Error("PDF 파일에서 이미지를 추출하는 중 서버 오류가 발생했습니다.");
   }
 
-  return await response.json(); // [{ image_id, page_number, preview_url, ocr_text, caption }, ...]
+  return await response.json();
 };
 
 /**
@@ -71,14 +82,13 @@ export const uploadImageApi = async (file) => {
     throw new Error("이미지 분석 중 서버 오류가 발생했습니다.");
   }
 
-  return response.json();
+  return await response.json();
 };
 
 /**
  * 5. 텍스트 정제 완료된 청크 데이터를 고객사 Target REST API 및 지식 DB로 전송
  */
 export const saveChunksApi = async (globalPrefix, chunks) => {
-  // 로컬스토리지 저장값(사용자 수정값) 가져오기
   const targetApiUrl = localStorage.getItem('aimeow_target_api_url') || '';
   const apiKey = localStorage.getItem('aimeow_api_key') || '';
 
@@ -88,7 +98,6 @@ export const saveChunksApi = async (globalPrefix, chunks) => {
     body: JSON.stringify({ 
       global_prefix: globalPrefix, 
       chunks: chunks,
-      // 🎯 백엔드 Webhook 발송용 Target REST API 정보 함께 전달
       target_api_url: targetApiUrl,
       api_key: apiKey
     })
@@ -98,11 +107,11 @@ export const saveChunksApi = async (globalPrefix, chunks) => {
     throw new Error("지식 DB 적재 및 REST API 전송에 실패했습니다.");
   }
 
-  return response.json();
+  return await response.json();
 };
 
 /**
- * 6. [추가] 정제 완료된 이미지 청크 데이터를 지식 DB로 전송
+ * 6. 정제 완료된 이미지 청크 데이터를 지식 DB로 전송
  */
 export const saveImageChunkApi = async (globalPrefix, imageData) => {
   const targetApiUrl = localStorage.getItem('aimeow_target_api_url') || '';
@@ -127,27 +136,42 @@ export const saveImageChunkApi = async (globalPrefix, imageData) => {
 };
 
 /**
- * 7. 서버 연동 설정(Target REST API URL / Bearer Token) 저장 요청
+ * 7. 서버 연동 설정(Target REST API URL / Bearer Token / 이미지 서버) 저장 요청
+ * - 🐾 인자가 (targetApiUrl, apiKey)로 올 수도 있고, 객체 형태({ target_api_url, api_key ... })로 올 수도 있도록 오버로딩 수용
  */
-export const saveServerConfigApi = async (targetApiUrl, apiKey) => {
+export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => {
+  let payload = {};
+
+  if (typeof targetApiUrlOrConfig === 'object' && targetApiUrlOrConfig !== null) {
+    payload = {
+      target_api_url: targetApiUrlOrConfig.target_api_url || targetApiUrlOrConfig.targetApiUrl || '',
+      api_key: targetApiUrlOrConfig.api_key || targetApiUrlOrConfig.apiKey || '',
+      image_upload_url: targetApiUrlOrConfig.image_upload_url || targetApiUrlOrConfig.imageUploadUrl || '',
+      image_server_token: targetApiUrlOrConfig.image_server_token || targetApiUrlOrConfig.imageServerToken || ''
+    };
+  } else {
+    payload = {
+      target_api_url: targetApiUrlOrConfig || '',
+      api_key: apiKey || ''
+    };
+  }
+
   const response = await fetch(`${API_BASE_URL}/api/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      target_api_url: targetApiUrl,
-      api_key: apiKey
-    })
+    body: JSON.stringify(payload) // 👈 중첩 객체 방지된 평탄화 1차원 JSON 전송
   });
 
   if (!response.ok) {
-    throw new Error("서버 연동 설정 저장에 실패했습니다.");
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "서버 연동 설정 저장에 실패했습니다.");
   }
 
   return await response.json();
 };
 
 /**
- * 8. 서버 연동 설정(Target REST API URL / Bearer Token) 이미지 OCR
+ * 8. 이미지 OCR 처리 요청
  */
 export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_user') => {
   const formData = new FormData();
@@ -164,5 +188,5 @@ export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_
     throw new Error('OCR 파싱 연동 중 서버 오류가 발생했습니다.');
   }
 
-  return await response.json(); // { status, image_server_url, ocr_text }
+  return await response.json();
 };

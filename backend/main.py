@@ -42,22 +42,42 @@ os.makedirs(uploads_dir, exist_ok=True)
 app.mount("/static", StaticFiles(directory=uploads_dir), name="static")
 
 # ============================================================
-# 🖥️ React UI (frontend_dist) 서빙 및 SPA 라우팅
+# 🖥️ React UI (frontend/dist) 상대경로 탐색 및 서빙
 # ============================================================
-dist_dir = os.path.join(os.path.dirname(__file__), "frontend_dist")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# 상대경로 후보 순서:
+# 1. 상위 폴더의 frontend/dist  (개발 환경: chunking-app/frontend/dist)
+# 2. 현재 폴더 내 frontend_dist (Docker 단일 배포 환경)
+CANDIDATE_PATHS = [
+    os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "dist")),
+    os.path.join(BASE_DIR, "frontend_dist")
+]
+
+dist_dir = None
+for path in CANDIDATE_PATHS:
+    if os.path.exists(path):
+        dist_dir = path
+        print(f"🟢 [Frontend UI] React 빌드 경로 연결 완료: {dist_dir}")
+        break
 
 # React JS/CSS 빌드 에셋 정적 마운트
-assets_dir = os.path.join(dist_dir, "assets")
-if os.path.exists(assets_dir):
-    app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+if dist_dir:
+    assets_dir = os.path.join(dist_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
 # SPA (Single Page Application) 서빙: API 경로 외 요청은 index.html로 응답
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
-    index_file = os.path.join(dist_dir, "index.html")
-    if os.path.exists(index_file):
-        return FileResponse(index_file)
-    return {"message": "AI Meow Frontend Build (`frontend_dist`) folder not found."}
+    if dist_dir:
+        index_file = os.path.join(dist_dir, "index.html")
+        if os.path.exists(index_file):
+            return FileResponse(index_file)
+    return {
+        "status": "error",
+        "message": "React 빌드 폴더(`dist`)를 찾을 수 없습니다. `npm run build`를 먼저 실행해 주세요."
+    }
 
 
 if __name__ == "__main__":

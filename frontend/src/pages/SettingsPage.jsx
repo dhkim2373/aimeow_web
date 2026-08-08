@@ -80,7 +80,6 @@ const styles = {
     boxShadow: '0 4px 12px rgba(37, 99, 235, 0.2)',
     marginTop: '8px'
   },
-  // 🎯 웹훅 JSON 스키마 안내 박스 스타일
   guideBox: {
     marginTop: '20px',
     padding: '18px',
@@ -152,7 +151,8 @@ function SettingsPage() {
   const [imageUploadUrl, setImageUploadUrl] = useState('');
   const [imageServerToken, setImageServerToken] = useState('');
 
-  // 3. 복사 완료 피드백 상태
+  // 3. UI 및 복사 관련 피드백 상태
+  const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
   // 🎯 백엔드 WebhookPayload 표준 규격 샘플 JSON
@@ -171,7 +171,7 @@ function SettingsPage() {
     ]
   };
 
-  // 🎯 접속 시 서버로부터 설정 로드
+  // 🎯 초기 진입 시 서버로부터 설정 데이터 로드
   useEffect(() => {
     fetchServerConfigApi()
       .then(data => {
@@ -187,19 +187,22 @@ function SettingsPage() {
       });
   }, []);
 
-  // 🎯 설정 저장
+  // 🎯 서버 연동 설정 저장 핸들러
   const handleSave = async () => {
     try {
+      setSaving(true);
       await saveServerConfigApi({
         target_api_url: targetApiUrl.trim(),
         api_key: apiKey.trim(),
         image_upload_url: imageUploadUrl.trim(),
         image_server_token: imageServerToken.trim()
       });
-      alert("🐾 RAG 연동 및 이미지 서버 설정이 서버에 성공적으로 저장되었습니다!");
+      alert("🐾 RAG 연동 및 이미지 서버 설정이 성공적으로 저장되었습니다!");
     } catch (err) {
       console.error("설정 저장 오류:", err);
-      alert("⚠️ 서버에 설정을 저장하는 중 오류가 발생했습니다.");
+      alert(`⚠️ 서버 설정 저장 실패: ${err.message || '알 수 없는 오류'}`);
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -230,7 +233,7 @@ function SettingsPage() {
           <div style={styles.subText}>정제 완료된 청크 데이터를 수신할 고객사의 REST API 엔드포인트입니다.</div>
           <input 
             type="text" 
-            placeholder="예: https://api.mycompany.com/v1/rag/ingest" 
+            placeholder="예: http://localhost:8000/api/webhook/ingest" 
             value={targetApiUrl}
             onChange={(e) => setTargetApiUrl(e.target.value)}
             style={styles.input}
@@ -249,13 +252,13 @@ function SettingsPage() {
           />
         </div>
 
-        {/* 💡 [신규 추가]: 웹훅 전송 JSON 스키마 가이드 영역 */}
+        {/* 웹훅 전송 JSON 스키마 가이드 영역 */}
         <div style={styles.guideBox}>
           <div style={styles.guideHeader}>
             <span style={{ fontSize: '13px', fontWeight: '800', color: '#60a5fa', display: 'flex', alignItems: 'center', gap: '6px' }}>
               <span>📋</span> 웹훅 수신 데이터 규격 (JSON Schema Guide)
             </span>
-            <button style={styles.copyBtn} onClick={handleCopyJson}>
+            <button style={styles.copyBtn} onClick={handleCopyJson} type="button">
               <span>{copied ? '✅' : '📄'}</span>
               <span>{copied ? '복사 완료!' : '샘플 JSON 복사'}</span>
             </button>
@@ -352,8 +355,13 @@ function SettingsPage() {
           />
         </div>
 
-        <button style={styles.saveBtn} onClick={handleSave}>
-          🐾 연동 설정 저장하기
+        <button 
+          type="button"
+          style={{ ...styles.saveBtn, opacity: saving ? 0.7 : 1, cursor: saving ? 'not-allowed' : 'pointer' }} 
+          onClick={handleSave}
+          disabled={saving}
+        >
+          {saving ? '🐾 저장 중...' : '🐾 연동 설정 저장하기'}
         </button>
       </div>
     </div>

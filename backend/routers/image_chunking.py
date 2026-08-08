@@ -1,12 +1,16 @@
 import os
+import io
 import uuid
 import base64
 import requests
 import asyncio
-import fitz  # PyMuPDF
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
-from config import get_user_workspace
+from PIL import Image
+import pdfplumber
+from pdf2image import convert_from_bytes
+
+from config import get_user_workspace, settings
 from routers.settings import get_config  # RAG 연동 설정 조회
 
 router = APIRouter(prefix="/api", tags=["Image Chunking"])
@@ -47,7 +51,10 @@ async def extract_images(
     file: UploadFile = File(...),
     user_id: Optional[str] = Form("default_user")
 ):
-    """PDF 또는 이미지 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 추출"""
+    """
+    PDF 또는 이미지 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 추출
+    (PyMuPDF/fitz 제거 -> pdf2image + pdfplumber 적용)
+    """
     filename = file.filename.lower()
     file_bytes = await file.read()
     
@@ -56,6 +63,7 @@ async def extract_images(
     extracted_images = []
 
     try:
+        # 1. 단일 이미지 파일 처리 (PNG, JPG, WEBP 등)
         if filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
             image_id = f"img_{uuid.uuid4().hex[:8]}"
             ext = filename.split('.')[-1]
@@ -75,27 +83,37 @@ async def extract_images(
                 "image_data_base64": f"data:image/{ext};base64,{base64_data}"
             })
 
+        # 2. PDF 문서 파일 처리 (pdf2image + pdfplumber)
         elif filename.endswith('.pdf'):
-            doc = fitz.open(stream=file_bytes, filetype="pdf")
-            
-            for page_idx in range(len(doc)):
-                page = doc[page_idx]
-                pix = page.get_pixmap(dpi=150)
-                img_bytes = pix.tobytes("png")
-                
-                image_id = f"img_p{page_idx + 1}_{uuid.uuid4().hex[:4]}"
+            # Poppler 경로 세팅 (Windows .env에 설정된 POPPLER_PATH 사용, Linux/Docker 시 None)
+            poppler_path = settings.POPPLER_PATH.strip() if settings.POPPLER_PATH and settings.POPPLER_PATH.strip() else None
+
+            # PDF 바이트 스트림 -> PIL Image 객체 리스트 변환 (DPI 150)
+            if poppler_path:
+                pdf_images = convert_from_bytes(file_bytes, dpi=150, poppler_path=poppler_path)
+            else:
+                pdf_images = convert_from_bytes(file_bytes, dpi=150)
+
+            for page_idx, pil_img in enumerate(pdf_images):
+                page_num = page_idx + 1
+                image_id = f"img_p{page_num}_{uuid.uuid4().hex[:4]}"
                 save_filename = f"{image_id}.png"
                 save_path = os.path.join(user_img_dir, save_filename)
 
-                with open(save_path, "wb") as f:
-                    f.write(img_bytes)
+                # PNG 파일로 디스크 저장
+                pil_img.save(save_path, "PNG")
+
+                # 메모리 버퍼를 활용한 Base64 인코딩
+                buffer = io.BytesIO()
+                pil_img.save(buffer, format="PNG")
+                img_bytes = buffer.getvalue()
+                base64_data = base64.b64encode(img_bytes).decode('utf-8')
 
                 full_static_url = f"{base_url}/static/{user_id}/images/{save_filename}"
-                base64_data = base64.b64encode(img_bytes).decode('utf-8')
 
                 extracted_images.append({
                     "image_id": image_id,
-                    "page_number": page_idx + 1,
+                    "page_number": page_num,
                     "preview_url": full_static_url,
                     "image_data_base64": f"data:image/png;base64,{base64_data}"
                 })
@@ -107,7 +125,9 @@ async def extract_images(
             "images": extracted_images
         }
     except Exception as e:
+        print(f"❌ 이미지 추출 실패 오류: {str(e)}")
         raise HTTPException(status_code=500, detail=f"이미지 추출 실패: {str(e)}")
+
 
 @router.post("/save-image-chunk")
 async def save_image_chunk(request: Request):

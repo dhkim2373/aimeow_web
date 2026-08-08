@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import UploadBox from '../components/ui/UploadBox';
 import LoadingView from '../components/ui/LoadingView';
-import { extractPdfImagesApi, saveImageChunkApi } from '../api/chunkingApi';
+import { extractPdfImagesApi, uploadImageApi, saveImageChunkApi } from '../api/chunkingApi';
 
 const imageGuideSteps = [
   { num: '01', title: '📁 파일 업로드', desc: 'PDF 또는 이미지 드래그' },
@@ -10,29 +10,39 @@ const imageGuideSteps = [
   { num: '04', title: '💾 지식 DB 저장', desc: 'URL + 정보 최종 적재' }
 ];
 
+// 렌더링용 이미지 URL 정제 헬퍼
 const getImageUrl = (img) => {
   if (!img) return '';
   if (img.image_data_base64) return img.image_data_base64;
 
   const url = img.preview_url || img.url || img.image_url || '';
-  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+  if (!url) return '';
+
+  if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url;
   }
 
-  const backendHost = `http://${window.location.hostname}:8100`;
+  const backendHost = window.location.port === '5173'
+    ? `http://${window.location.hostname}:8100`
+    : '';
+
   return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
+// 지식 DB 저장 및 서빙 URL 표시용 헬퍼
 const getHttpServerUrl = (img) => {
   if (!img) return '';
   const url = img.preview_url || img.image_server_url || img.url || img.image_url || '';
-  
-  if (url.startsWith('http://') || url.startsWith('https://')) {
+  if (!url) return '';
+
+  if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
-  
-  if (url && !url.startsWith('data:')) {
-    const backendHost = `http://${window.location.hostname}:8100`;
+
+  if (!url.startsWith('data:')) {
+    const backendHost = window.location.port === '5173'
+      ? `http://${window.location.hostname}:8100`
+      : '';
     return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
   }
 
@@ -92,6 +102,21 @@ const styles = {
     fontSize: '13px',
     fontWeight: '600',
     outline: 'none'
+  },
+  // 🎯 작업 초기화 버튼 스타일
+  resetBtn: {
+    backgroundColor: '#f1f5f9',
+    color: '#475569',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: '700',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    transition: 'all 0.2s ease'
   },
   splitWrapper: {
     display: 'flex',
@@ -236,6 +261,7 @@ function ImageChunkingPage() {
     };
   }, [isResizing]);
 
+  // 🎯 파일 업로드 핸들러
   const handleFileUpload = async (file) => {
     setStep('loading');
     setSourceFilename(file.name);
@@ -246,12 +272,24 @@ function ImageChunkingPage() {
       let extractedList = [];
 
       if (file.type.startsWith('image/')) {
-        const objectUrl = URL.createObjectURL(file);
-        extractedList = [{
-          image_id: 'img_1',
-          page_number: 1,
-          preview_url: objectUrl
-        }];
+        try {
+          const apiRes = await uploadImageApi(file);
+          const rawUrl = apiRes.preview_url || apiRes.image_url || URL.createObjectURL(file);
+          extractedList = [{
+            image_id: apiRes.image_id || 'img_single_1',
+            page_number: 1,
+            preview_url: rawUrl,
+            ocr_text: apiRes.ocr_text || ''
+          }];
+        } catch (imgErr) {
+          console.warn("단일 이미지 백엔드 업로드 예외 발생, 로컬 객체 생성으로 대체:", imgErr);
+          const objectUrl = URL.createObjectURL(file);
+          extractedList = [{
+            image_id: 'img_single_1',
+            page_number: 1,
+            preview_url: objectUrl
+          }];
+        }
       } else {
         const responseData = await extractPdfImagesApi(file);
 
@@ -272,7 +310,7 @@ function ImageChunkingPage() {
       }
     } catch (err) {
       console.error("이미지 추출 실패:", err);
-      alert(err.message || "PDF 파일에서 이미지를 추출하는 중 오류가 발생했습니다.");
+      alert(err.message || "파일에서 이미지를 처리하는 중 오류가 발생했습니다.");
       setStep('upload');
     }
   };
@@ -282,9 +320,25 @@ function ImageChunkingPage() {
     const cleanHttpUrl = getHttpServerUrl(imgObj);
     setImageServerUrl(cleanHttpUrl);
 
-    setManualText('');
+    setManualText(imgObj.ocr_text || '');
     setCaption(`[페이지 ${imgObj.page_number || 1}] 이미지/표 정보`);
     setTags('');
+  };
+
+  // 🎯 작업 초기화 (전체 상태 리셋 및 업로드 화면으로 전환)
+  const handleReset = () => {
+    if (window.confirm("현재 업로드된 이미지 및 작성 중인 작업 내용이 모두 초기화됩니다. 진행하시겠습니까?")) {
+      setStep('upload');
+      setGlobalPrefix('');
+      setSourceFilename('');
+      setImageList([]);
+      setSelectedImage(null);
+      setImageServerUrl('');
+      setManualText('');
+      setCaption('');
+      setImageType('TABLE');
+      setTags('');
+    }
   };
 
   const handleSaveImageChunk = async () => {
@@ -296,7 +350,7 @@ function ImageChunkingPage() {
         global_prefix: globalPrefix,
         source_filename: sourceFilename,
         image_url: imageServerUrl,
-        ocr_text: manualText, // 수동 입력 마크다운/텍스트 데이터
+        ocr_text: manualText,
         caption: caption,
         image_type: imageType,
         tags: tags
@@ -350,9 +404,17 @@ function ImageChunkingPage() {
                 />
               </div>
 
-              <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
-                총 {Array.isArray(imageList) ? imageList.length : 0}개의 이미지 추출됨
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
+                  총 {Array.isArray(imageList) ? imageList.length : 0}개의 이미지 추출됨
+                </span>
+
+                {/* 🎯 작업 초기화 버튼 */}
+                <button type="button" style={styles.resetBtn} onClick={handleReset}>
+                  <span>🔄</span>
+                  <span>작업 초기화</span>
+                </button>
+              </div>
             </div>
 
             <div style={styles.splitWrapper} ref={wrapperRef}>
