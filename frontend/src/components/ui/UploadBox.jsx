@@ -1,5 +1,6 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import aiMeowLogo from '../../assets/aimeow-logo.png';
+import { fetchServerConfigApi } from '../../api/chunkingApi';
 
 const styles = {
   dropZone: { 
@@ -40,7 +41,6 @@ const styles = {
     display: 'flex', 
     justifyContent: 'center' 
   },
-  // 🐾 [고양이 로고 확대]: 160px -> 210px (Full HD 기준 시원한 크기)
   logoImg: (isDragActive) => ({
     width: '210px',
     height: 'auto',
@@ -53,7 +53,7 @@ const styles = {
   mainText: { 
     fontWeight: '800', 
     color: '#0f172a', 
-    fontSize: '22px', // 폰트 크기 확대
+    fontSize: '22px', 
     margin: '0 0 10px 0', 
     letterSpacing: '-0.3px' 
   },
@@ -67,13 +67,59 @@ const styles = {
     borderRadius: '20px', 
     border: '1px solid #bfdbfe' 
   },
-  
-  // 🔍 [Full HD 대응 파이프라인 배너 크기 확장]
+  alertBannerContainer: {
+    width: '100%',
+    maxWidth: '960px',
+    marginBottom: '20px',
+    padding: '14px 20px',
+    backgroundColor: '#fffbeb',
+    border: '1px solid #fde68a',
+    borderRadius: '16px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    boxShadow: '0 4px 12px rgba(245, 158, 11, 0.1)'
+  },
+  alertLeftGroup: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '12px'
+  },
+  alertTextGroup: {
+    display: 'flex',
+    flexDirection: 'column',
+    textAlign: 'left'
+  },
+  alertTitle: {
+    fontSize: '14px',
+    fontWeight: '800',
+    color: '#92400e',
+    margin: 0
+  },
+  alertDesc: {
+    fontSize: '12px',
+    fontWeight: '500',
+    color: '#b45309',
+    margin: '3px 0 0 0'
+  },
+  alertBtn: {
+    backgroundColor: '#f59e0b',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '8px 14px',
+    fontSize: '12px',
+    fontWeight: '800',
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    transition: 'all 0.15s ease'
+  },
   guideBannerContainer: {
     width: '100%',
-    maxWidth: '960px', // 최대 너비 확장 (960px)
+    maxWidth: '960px',
     marginTop: '32px',
-    padding: '18px 24px', // 내부 패딩 확대
+    padding: '18px 24px',
     backgroundColor: '#ffffff',
     border: '1px solid #cbd5e1',
     borderRadius: '16px',
@@ -84,14 +130,45 @@ const styles = {
 
 function UploadBox({ 
   onFileUpload, 
+  onNavigateSettings, // 🎯 Props 전달 방식 지원
   showGuide = false, 
   guideTitle = "스마트 청킹 작업 프로세스", 
   guideBadge = "RAG Pipeline", 
   guideSteps = [] 
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
+  const [hasTargetUrl, setHasTargetUrl] = useState(true);
+  
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
+
+  // 🎯 Target REST API URL 설정 유무 점검
+  useEffect(() => {
+    let isMounted = true;
+    async function checkTargetUrl() {
+      try {
+        const config = await fetchServerConfigApi();
+        if (isMounted) {
+          if (!config?.target_api_url || !config.target_api_url.trim()) {
+            setHasTargetUrl(false);
+          } else {
+            setHasTargetUrl(true);
+          }
+        }
+      } catch (err) {
+        console.warn("RAG 설정 로드 실패:", err);
+        const localTarget = localStorage.getItem('aimeow_target_api_url') || localStorage.getItem('target_api_url');
+        if (isMounted) {
+          setHasTargetUrl(Boolean(localTarget && localTarget.trim()));
+        }
+      }
+    }
+    checkTargetUrl();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleDragEnter = (e) => {
     e.preventDefault();
@@ -131,6 +208,19 @@ function UploadBox({
     }
   };
 
+  // 🎯 버튼 클릭 시 1차: Props 콜백 실행, 2차: CustomEvent 전송 (App.jsx의 이벤트 수신기 트리거)
+  const handleGoToSettings = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (typeof onNavigateSettings === 'function') {
+      onNavigateSettings();
+    }
+    
+    // CustomEvent 이벤트 전송
+    window.dispatchEvent(new CustomEvent('navigate-settings'));
+  };
+
   return (
     <div 
       style={{
@@ -149,8 +239,31 @@ function UploadBox({
         style={{ display: 'none' }} 
         onChange={handleFileChange} 
       />
+
+      {/* ⚠️ [Target REST API 미등록 시 상단 경고 배너] */}
+      {!hasTargetUrl && (
+        <div style={styles.alertBannerContainer} onClick={(e) => e.stopPropagation()}>
+          <div style={styles.alertLeftGroup}>
+            <span style={{ fontSize: '20px' }}>⚠️</span>
+            <div style={styles.alertTextGroup}>
+              <p style={styles.alertTitle}>Target REST API URL이 설정되지 않았습니다!</p>
+              <p style={styles.alertDesc}>
+                정제된 청크 데이터를 지식 DB에 저장하려면 먼저 Target REST API 주소를 등록해야 합니다.
+              </p>
+            </div>
+          </div>
+          <button 
+            type="button"
+            style={styles.alertBtn} 
+            onClick={handleGoToSettings}
+            title="Target API / RAG 설정 페이지로 이동"
+          >
+            ⚙️ 설정하러 가기
+          </button>
+        </div>
+      )}
       
-      {/* 중앙 클릭/드래그 타깃 (확대된 로고 및 텍스트) */}
+      {/* 중앙 클릭/드래그 타깃 */}
       <div 
         style={styles.clickableContent(isDragActive)}
         onClick={handleContentClick}
@@ -174,7 +287,7 @@ function UploadBox({
         </p>
       </div>
 
-      {/* 🎯 [Full HD 시원한 크기의 파이프라인 설명 배너] */}
+      {/* 🎯 파이프라인 설명 배너 */}
       {showGuide && guideSteps.length > 0 && (
         <div style={styles.guideBannerContainer} onClick={(e) => e.stopPropagation()}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
@@ -200,15 +313,12 @@ function UploadBox({
                   alignItems: 'center',
                   textAlign: 'center'
                 }}>
-                  {/* STEP 뱃지 */}
                   <span style={{ fontSize: '11px', fontWeight: '900', color: '#2563eb', backgroundColor: '#eff6ff', border: '1px solid #dbeafe', padding: '2px 8px', borderRadius: '6px', marginBottom: '6px' }}>
                     STEP {step.num}
                   </span>
-                  {/* 단계 제목 */}
                   <span style={{ fontSize: '13px', fontWeight: '800', color: '#0f172a', marginBottom: '4px', whiteSpace: 'nowrap' }}>
                     {step.title}
                   </span>
-                  {/* 설명 글자 */}
                   <span style={{ fontSize: '12px', color: '#475569', wordBreak: 'keep-all', lineHeight: '1.3', fontWeight: '500' }}>
                     {step.desc}
                   </span>

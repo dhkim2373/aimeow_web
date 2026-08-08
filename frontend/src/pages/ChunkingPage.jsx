@@ -7,10 +7,10 @@ import { uploadPdfApi, saveChunksApi } from '../api/chunkingApi';
 
 // 🎯 [스마트 텍스트 청킹 전용 파이프라인 단계 정의]
 const textGuideSteps = [
-  { num: '01', title: '📄 규정 문서 업로드', desc: 'SOP PDF 문서 선택 및 파일 처리' },
+  { num: '01', title: '📄 규정 문서 업로드', desc: 'PDF 문서 선택 및 파일 처리' },
   { num: '02', title: '✂️ 세부 라인 파싱', desc: '문장/줄 단위 자동 구조화' },
   { num: '03', title: '✏️ 청크 분할 & 정제', desc: '절단선 지정 및 오탈자/여백 편집' },
-  { num: '04', title: '💾 지식 DB 적재', desc: '정제 텍스트 데이터 Vector DB 저장' }
+  { num: '04', title: '💾 지식 DB 적재', desc: '정제 텍스트 데이터 저장' }
 ];
 
 const styles = {

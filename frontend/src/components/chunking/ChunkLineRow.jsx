@@ -45,7 +45,7 @@ const clawStyles = `
   }
 `;
 
-// 🎨 간단한 마크다운 인라인 뷰어 헬퍼
+// 🎨 간단한 마크다운 인라인 뷰어 헬퍼 (굵고 진한 글씨체 반영)
 const renderFormattedText = (text) => {
   if (!text) return null;
 
@@ -58,10 +58,13 @@ const renderFormattedText = (text) => {
   const parts = formatted.split(/(\*\*.*?\*\*)/g);
 
   return (
-    <span style={{ fontWeight: isHeader ? '700' : 'normal', color: isHeader ? '#1e40af' : '#0f172a' }}>
+    <span style={{ 
+      fontWeight: isHeader ? '800' : '700', // 📌 [수정]: 기본 텍스트 굵기를 700(Bold)으로 강화
+      color: isHeader ? '#1d4ed8' : '#0f172a' // 📌 [수정]: Slate-900 선명한 검은색 계열 적용
+    }}>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
-          return <strong key={i} style={{ color: '#0f172a', fontWeight: '700' }}>{part.slice(2, -2)}</strong>;
+          return <strong key={i} style={{ color: '#000000', fontWeight: '800' }}>{part.slice(2, -2)}</strong>;
         }
         return part;
       })}
@@ -120,10 +123,10 @@ const styles = {
     backgroundColor: '#ffffff',
     fontSize: '13px',
     fontFamily: 'inherit',
-    color: '#0f172a',
+    color: '#0f172a',       // 📌 [수정]: 수정 모드 입력창 텍스트 색상 명확화
     outline: 'none',
     padding: '3px 6px',
-    fontWeight: '500'
+    fontWeight: '700'       // 📌 [수정]: 수정 모드 입력창 글씨도 굵게(Bold) 적용
   },
   textPreview: {
     flex: 1,
@@ -133,7 +136,9 @@ const styles = {
     borderRadius: '4px',
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-all',
-    userSelect: 'none'
+    userSelect: 'none',
+    fontWeight: '700',      // 📌 [수정]: 미리보기 컨테이너 기본 굵기 Bold 지정
+    color: '#0f172a'        // 📌 [수정]: 흐릿한 회색 대신 진한 검은색 계열 지정
   },
   badge: {
     fontSize: '11px',
@@ -252,7 +257,7 @@ function ChunkLineRow({
           ➕
         </button>
 
-        {/* 🎯 [수정]: 더블 클릭(onDoubleClick)할 때만 편집 입력창으로 전환 */}
+        {/* 🎯 더블 클릭(onDoubleClick) 시 편집창 전환 및 굵은 텍스트(Bold) 스타일링 적용 */}
         {isEditing ? (
           <input
             type="text"
@@ -267,7 +272,7 @@ function ChunkLineRow({
         ) : (
           <div 
             style={styles.textPreview} 
-            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }} // 👈 더블 클릭으로 변경!
+            onDoubleClick={(e) => { e.stopPropagation(); setIsEditing(true); }}
             title="단일 클릭: PDF 이동 / 더블 클릭: 텍스트 수정"
           >
             {renderFormattedText(line.text)}

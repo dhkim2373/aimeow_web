@@ -120,7 +120,7 @@ function Sidebar(props) {
           <div style={styles.iconBadge(activeMenu === 'chunking' || activeMenu === 'smart-chunk')}>
             ⚡
           </div>
-          <span style={{ letterSpacing: '-0.3px' }}>스마트 청킹 매니저</span>
+          <span style={{ letterSpacing: '-0.3px' }}>문서 텍스트 청킹</span>
         </button>
 
         {/* 2. 이미지 청킹 매니저 */}
@@ -133,7 +133,7 @@ function Sidebar(props) {
           <div style={styles.iconBadge(activeMenu === 'img_chunking' || activeMenu === 'image-chunk')}>
             🖼️
           </div>
-          <span style={{ letterSpacing: '-0.3px' }}>이미지 청킹 매니저</span>
+          <span style={{ letterSpacing: '-0.3px' }}>문서 이미지 청킹</span>
         </button>
 
         {/* 3. RAG 연동 설정 */}
@@ -146,7 +146,7 @@ function Sidebar(props) {
           <div style={styles.iconBadge(activeMenu === 'settings' || activeMenu === 'rag-settings')}>
             ⚙️
           </div>
-          <span style={{ letterSpacing: '-0.3px' }}>RAG 연동 설정</span>
+          <span style={{ letterSpacing: '-0.3px' }}>Target API / RAG 설정</span>
         </button>
       </div>
 

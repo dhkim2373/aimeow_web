@@ -1,6 +1,5 @@
-// src/App.jsx
-import React, { useState } from 'react';
-// import './App.css'; 👈 [필수 제거]: index.css를 덮어씌우는 원인이므로 이 줄을 삭제/주석 처리하세요!
+import React, { useState, useEffect } from 'react';
+// import './App.css'; 👈 index.css를 덮어씌우는 원인이므로 주석 유지/제거
 import MainLayout from './components/layout/MainLayout';
 import ChunkingPage from './pages/ChunkingPage';
 import ImageChunkingPage from './pages/ImageChunkingPage';
@@ -9,6 +8,18 @@ import SettingsPage from './pages/SettingsPage';
 
 function App() {
   const [currentMenu, setCurrentMenu] = useState('chunking');
+
+  // 🎯 UploadBox 등 하위 컴포넌트에서 'settings' 페이지 전환 요청 이벤트 수신
+  useEffect(() => {
+    const handleNavigateSettings = () => {
+      setCurrentMenu('settings');
+    };
+
+    window.addEventListener('navigate-settings', handleNavigateSettings);
+    return () => {
+      window.removeEventListener('navigate-settings', handleNavigateSettings);
+    };
+  }, []);
 
   const renderPage = () => {
     switch (currentMenu) {

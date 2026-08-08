@@ -137,7 +137,6 @@ export const saveImageChunkApi = async (globalPrefix, imageData) => {
 
 /**
  * 7. 서버 연동 설정(Target REST API URL / Bearer Token / 이미지 서버) 저장 요청
- * - 🐾 인자가 (targetApiUrl, apiKey)로 올 수도 있고, 객체 형태({ target_api_url, api_key ... })로 올 수도 있도록 오버로딩 수용
  */
 export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => {
   let payload = {};
@@ -159,7 +158,7 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
   const response = await fetch(`${API_BASE_URL}/api/config`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload) // 👈 중첩 객체 방지된 평탄화 1차원 JSON 전송
+    body: JSON.stringify(payload)
   });
 
   if (!response.ok) {
@@ -190,3 +189,8 @@ export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_
 
   return await response.json();
 };
+
+// 🎯 [별칭 내보내기]
+export const getSettingsConfig = fetchServerConfigApi;
+export const saveSettingsConfig = saveServerConfigApi;
+export const getConfig = fetchServerConfigApi;

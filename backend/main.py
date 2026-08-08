@@ -46,9 +46,6 @@ app.mount("/static", StaticFiles(directory=uploads_dir), name="static")
 # ============================================================
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# 상대경로 후보 순서:
-# 1. 상위 폴더의 frontend/dist  (개발 환경: chunking-app/frontend/dist)
-# 2. 현재 폴더 내 frontend_dist (Docker 단일 배포 환경)
 CANDIDATE_PATHS = [
     os.path.abspath(os.path.join(BASE_DIR, "..", "frontend", "dist")),
     os.path.join(BASE_DIR, "frontend_dist")
@@ -67,13 +64,20 @@ if dist_dir:
     if os.path.exists(assets_dir):
         app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
-# SPA (Single Page Application) 서빙: API 경로 외 요청은 index.html로 응답
+# SPA 및 루트 정적 파일(favicon.svg 등) 서빙
 @app.get("/{full_path:path}")
 async def serve_react_app(full_path: str):
     if dist_dir:
+        # 🎯 1. 요청된 파일(예: favicon.svg)이 dist 디렉터리에 실제로 존재하는지 먼저 검사
+        requested_file = os.path.join(dist_dir, full_path)
+        if full_path and os.path.isfile(requested_file):
+            return FileResponse(requested_file)
+
+        # 2. 파일이 없거나 일반 페이지 URL인 경우 index.html 반환 (SPA Fallback)
         index_file = os.path.join(dist_dir, "index.html")
         if os.path.exists(index_file):
             return FileResponse(index_file)
+
     return {
         "status": "error",
         "message": "React 빌드 폴더(`dist`)를 찾을 수 없습니다. `npm run build`를 먼저 실행해 주세요."
