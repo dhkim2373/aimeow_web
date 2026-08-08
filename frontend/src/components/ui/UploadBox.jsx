@@ -24,7 +24,7 @@ const styles = {
     border: '2px dashed #3b82f6', 
     backgroundColor: '#eff6ff' 
   },
-  clickableContent: (isDragActive) => ({
+  clickableContent: (isDragActive, mouseTransform) => ({
     display: 'inline-flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -33,8 +33,11 @@ const styles = {
     borderRadius: '24px',
     cursor: 'pointer',
     backgroundColor: isDragActive ? 'rgba(255,255,255,0.7)' : 'transparent',
-    transition: 'all 0.2s ease-in-out',
-    userSelect: 'none'
+    transition: 'background-color 0.2s ease-in-out',
+    userSelect: 'none',
+    perspective: '1000px', // 🐾 3D 입체감 깊이 설정
+    transform: mouseTransform, // 🐾 관성 기반 동적 3D 회전 + 이동 적용
+    willChange: 'transform'
   }),
   logoWrapper: { 
     marginBottom: '16px', 
@@ -130,7 +133,7 @@ const styles = {
 
 function UploadBox({ 
   onFileUpload, 
-  onNavigateSettings, // 🎯 Props 전달 방식 지원
+  onNavigateSettings,
   showGuide = false, 
   guideTitle = "스마트 청킹 작업 프로세스", 
   guideBadge = "RAG Pipeline", 
@@ -139,8 +142,13 @@ function UploadBox({
   const [isDragActive, setIsDragActive] = useState(false);
   const [hasTargetUrl, setHasTargetUrl] = useState(true);
   
+  // 🐾 targetPos: 실시간 마우스 목표 위치 / currentPos: 관성으로 부드럽게 추종하는 현재 위치
+  const [targetPos, setTargetPos] = useState({ x: 0, y: 0 });
+  const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
+
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
+  const contentRef = useRef(null);
 
   // 🎯 Target REST API URL 설정 유무 점검
   useEffect(() => {
@@ -169,6 +177,48 @@ function UploadBox({
       isMounted = false;
     };
   }, []);
+
+  // 🐾 [핵심 로직] Lerp(선형 보간) 기반 프레임 애니메이션 루프 (관성 효과)
+  useEffect(() => {
+    let animFrameId;
+    const lerpFactor = 0.08; // 0.08: 값이 작을수록 부드럽고 묵직하게 감속하며 추종함
+
+    const animate = () => {
+      setCurrentPos((prev) => {
+        const nextX = prev.x + (targetPos.x - prev.x) * lerpFactor;
+        const nextY = prev.y + (targetPos.y - prev.y) * lerpFactor;
+        return { x: nextX, y: nextY };
+      });
+      animFrameId = requestAnimationFrame(animate);
+    };
+
+    animFrameId = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(animFrameId);
+  }, [targetPos]);
+
+  // 🐾 마우스 이동 이벤트 Handler
+  const handleMouseMove = (e) => {
+    if (!contentRef.current) return;
+
+    const rect = contentRef.current.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+
+    const xRatio = (e.clientX - centerX) / (rect.width / 2);
+    const yRatio = (e.clientY - centerY) / (rect.height / 2);
+
+    // X, Y 목표 비중 설정
+    setTargetPos({
+      x: Math.max(-1, Math.min(1, xRatio)),
+      y: Math.max(-1, Math.min(1, yRatio))
+    });
+  };
+
+  // 🐾 마우스 벗어날 때 복귀
+  const handleMouseLeaveContent = () => {
+    setTargetPos({ x: 0, y: 0 });
+  };
 
   const handleDragEnter = (e) => {
     e.preventDefault();
@@ -208,7 +258,6 @@ function UploadBox({
     }
   };
 
-  // 🎯 버튼 클릭 시 1차: Props 콜백 실행, 2차: CustomEvent 전송 (App.jsx의 이벤트 수신기 트리거)
   const handleGoToSettings = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -217,9 +266,19 @@ function UploadBox({
       onNavigateSettings();
     }
     
-    // CustomEvent 이벤트 전송
     window.dispatchEvent(new CustomEvent('navigate-settings'));
   };
+
+  // 🐾 회전(rotate) + 커서 방향 약간의 공간 이동(translate) 조합으로 시선/고개 조아림 극대화
+  const maxRotateDeg = 16;
+  const maxTranslatePx = 10;
+
+  const rotateY = currentPos.x * maxRotateDeg;
+  const rotateX = -currentPos.y * maxRotateDeg;
+  const translateX = currentPos.x * maxTranslatePx;
+  const translateY = currentPos.y * maxTranslatePx;
+
+  const mouseTransform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateX(${translateX.toFixed(2)}px) translateY(${translateY.toFixed(2)}px)`;
 
   return (
     <div 
@@ -263,10 +322,13 @@ function UploadBox({
         </div>
       )}
       
-      {/* 중앙 클릭/드래그 타깃 */}
+      {/* 🐾 중앙 클릭/드래그 타깃 (관성 트래킹 연동) */}
       <div 
-        style={styles.clickableContent(isDragActive)}
+        ref={contentRef}
+        style={styles.clickableContent(isDragActive, mouseTransform)}
         onClick={handleContentClick}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeaveContent}
       >
         <div style={styles.logoWrapper}>
           <img 

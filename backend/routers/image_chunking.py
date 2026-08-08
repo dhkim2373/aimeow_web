@@ -85,8 +85,17 @@ async def extract_images(
 
         # 2. PDF 문서 파일 처리 (pdf2image + pdfplumber)
         elif filename.endswith('.pdf'):
-            # Poppler 경로 세팅 (Windows .env에 설정된 POPPLER_PATH 사용, Linux/Docker 시 None)
-            poppler_path = settings.POPPLER_PATH.strip() if settings.POPPLER_PATH and settings.POPPLER_PATH.strip() else None
+            # 🎯 [크로스 플랫폼 Poppler 경로 자동 감지 로직]
+            poppler_path = None
+            
+            # 1) Windows 환경 설정값 우선 확인 (설정 경로가 실제로 존재할 때만 적용)
+            if settings.POPPLER_PATH and os.path.exists(settings.POPPLER_PATH.strip()):
+                poppler_path = settings.POPPLER_PATH.strip()
+            # 2) Linux/Docker 환경 표준 설치 경로 탐색
+            elif os.path.exists("/usr/bin/pdftoppm"):
+                poppler_path = "/usr/bin"
+
+            print(f"🔍 [PDF 파싱] 적용된 Poppler 경로: {poppler_path if poppler_path else '시스템 기본 PATH 탐색'}")
 
             # PDF 바이트 스트림 -> PIL Image 객체 리스트 변환 (DPI 150)
             if poppler_path:
