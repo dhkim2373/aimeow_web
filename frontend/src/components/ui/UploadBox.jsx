@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import catPlayVideo from '../../assets/cat_play.mp4';
+import defaultCatVideo from '../../assets/cat_play.mp4';
 import { fetchServerConfigApi } from '../../api/chunkingApi';
 
 const styles = {
@@ -44,14 +44,14 @@ const styles = {
     alignItems: 'center',
     width: '210px',
     height: '210px',
-    borderRadius: '50%', // 비디오를 동그랗게 얹고 싶다면 사용 (필요 없으면 제거 가능)
+    borderRadius: '50%',
     overflow: 'hidden',
     pointerEvents: 'none'
   },
   logoVideo: (isDragActive) => ({
     width: '100%',
     height: '100%',
-    objectFit: 'cover', // 영상을 영역에 맞춰 깔끔하게 채움
+    objectFit: 'cover',
     filter: isDragActive 
       ? 'drop-shadow(0 12px 24px rgba(59, 130, 246, 0.45)) scale(1.06)' 
       : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.12))',
@@ -144,6 +144,7 @@ const styles = {
 function UploadBox({ 
   onFileUpload, 
   onNavigateSettings,
+  videoSrc, // 🐾 재생할 비디오 경로 프롭 추가
   showGuide = false, 
   guideTitle = "스마트 청킹 작업 프로세스", 
   guideBadge = "RAG Pipeline", 
@@ -310,7 +311,7 @@ function UploadBox({
         </div>
       )}
       
-      {/* 🐾 중앙 클릭/드래그 타깃 (동영상 로고 연동) */}
+      {/* 🐾 중앙 클릭/드래그 타깃 */}
       <div 
         ref={contentRef}
         style={styles.clickableContent(isDragActive)}
@@ -318,7 +319,7 @@ function UploadBox({
       >
         <div style={styles.logoWrapper}>
           <video 
-            src={catPlayVideo} 
+            src={videoSrc || defaultCatVideo} 
             autoPlay 
             loop 
             muted 

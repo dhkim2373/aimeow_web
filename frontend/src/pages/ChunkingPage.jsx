@@ -5,6 +5,9 @@ import PdfViewer from '../components/chunking/PdfViewer';
 import ChunkEditor from '../components/chunking/ChunkEditor';
 import { uploadPdfApi, saveChunksApi } from '../api/chunkingApi';
 
+// 🐾 텍스트 청킹 화면 전용 동영상 import
+import catCuttingVideo from '../assets/cat_cutting.mp4';
+
 // 🎯 [스마트 텍스트 청킹 전용 파이프라인 단계 정의]
 const textGuideSteps = [
   { num: '01', title: '📄 규정 문서 업로드', desc: 'PDF 문서 선택 및 파일 처리' },
@@ -361,10 +364,11 @@ function ChunkingPage() {
   return (
     <div style={styles.fullContainer}>
       <div style={styles.mainCard}>
-        {/* Step 1: 업로드 (스마트 텍스트 청킹 전용 가이드 전달) */}
+        {/* Step 1: 업로드 (스마트 텍스트 청킹 전용 가이드 및 cat_cutting.mp4 전달) */}
         {step === 'upload' && (
           <UploadBox 
             onFileUpload={handleFileUpload} 
+            videoSrc={catCuttingVideo}
             showGuide={true}
             guideTitle="스마트 텍스트 청킹 작업 프로세스"
             guideBadge="Text-to-RAG Pipeline"
