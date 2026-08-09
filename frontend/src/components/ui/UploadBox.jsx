@@ -1,6 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
-import aiMeowLogo from '../../assets/aimeow-logo.png';
 import { fetchServerConfigApi } from '../../api/chunkingApi';
+
+// 🐾 3방향 고양이 시선 이미지 import (m10, center, p10)
+import catM10 from '../../assets/cat_angle_m10.png';
+import catCenter from '../../assets/cat_angle.png'; // 정면
+import catP10 from '../../assets/cat_angle_p10.png';
+
+// 왼쪽(-10°), 정면(0°), 오른쪽(+10°) 순서대로 3장 정렬
+const catFrames = [
+  catM10,
+  catCenter,
+  catP10
+];
 
 const styles = {
   dropZone: { 
@@ -24,7 +35,7 @@ const styles = {
     border: '2px dashed #3b82f6', 
     backgroundColor: '#eff6ff' 
   },
-  clickableContent: (isDragActive, mouseTransform) => ({
+  clickableContent: (isDragActive) => ({
     display: 'inline-flex',
     flexDirection: 'column',
     alignItems: 'center',
@@ -34,24 +45,25 @@ const styles = {
     cursor: 'pointer',
     backgroundColor: isDragActive ? 'rgba(255,255,255,0.7)' : 'transparent',
     transition: 'background-color 0.2s ease-in-out',
-    userSelect: 'none',
-    perspective: '1000px', // 🐾 3D 입체감 깊이 설정
-    transform: mouseTransform, // 🐾 관성 기반 동적 3D 회전 + 이동 적용
-    willChange: 'transform'
+    userSelect: 'none'
   }),
   logoWrapper: { 
     marginBottom: '16px', 
     display: 'flex', 
-    justifyContent: 'center' 
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: '210px',
+    height: '210px',
+    overflow: 'hidden'
   },
   logoImg: (isDragActive) => ({
-    width: '210px',
-    height: 'auto',
+    width: '100%',
+    height: '100%',
     objectFit: 'contain',
     filter: isDragActive 
       ? 'drop-shadow(0 12px 24px rgba(59, 130, 246, 0.45)) scale(1.06)' 
       : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.12))',
-    transition: 'all 0.2s ease-in-out'
+    transition: 'filter 0.2s ease-in-out, transform 0.2s ease-in-out'
   }),
   mainText: { 
     fontWeight: '800', 
@@ -142,13 +154,50 @@ function UploadBox({
   const [isDragActive, setIsDragActive] = useState(false);
   const [hasTargetUrl, setHasTargetUrl] = useState(true);
   
-  // 🐾 targetPos: 실시간 마우스 목표 위치 / currentPos: 관성으로 부드럽게 추종하는 현재 위치
-  const [targetPos, setTargetPos] = useState({ x: 0, y: 0 });
-  const [currentPos, setCurrentPos] = useState({ x: 0, y: 0 });
+  // 🐾 현재 표출할 고양이 이미지 Index (기본값 1: 정면 catCenter)
+  const [currentFrameIndex, setCurrentFrameIndex] = useState(1);
 
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
   const contentRef = useRef(null);
+
+  // 🎯 이미지 프리로딩(Preload) 처리
+  useEffect(() => {
+    catFrames.forEach((src) => {
+      const img = new Image();
+      img.src = src;
+    });
+  }, []);
+
+  // 🐾 화면 전체 마우스 추적 이벤트 바인딩
+  useEffect(() => {
+    const handleGlobalMouseMove = (e) => {
+      if (!contentRef.current) return;
+
+      const rect = contentRef.current.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+
+      // 화면 너비 절반을 기준으로 마우스의 X 위치 비율 계산 (-1.0 ~ 1.0)
+      const xRatio = (e.clientX - centerX) / (window.innerWidth / 2);
+
+      // 비율을 0 ~ 1 범위로 변환
+      const normalizedX = Math.max(0, Math.min(1, (xRatio + 1) / 2));
+
+      // 0~2 인덱스로 매핑
+      const frameIdx = Math.min(
+        Math.floor(normalizedX * catFrames.length),
+        catFrames.length - 1
+      );
+
+      setCurrentFrameIndex(frameIdx);
+    };
+
+    window.addEventListener('mousemove', handleGlobalMouseMove);
+
+    return () => {
+      window.removeEventListener('mousemove', handleGlobalMouseMove);
+    };
+  }, []);
 
   // 🎯 Target REST API URL 설정 유무 점검
   useEffect(() => {
@@ -177,48 +226,6 @@ function UploadBox({
       isMounted = false;
     };
   }, []);
-
-  // 🐾 [핵심 로직] Lerp(선형 보간) 기반 프레임 애니메이션 루프 (관성 효과)
-  useEffect(() => {
-    let animFrameId;
-    const lerpFactor = 0.08; // 0.08: 값이 작을수록 부드럽고 묵직하게 감속하며 추종함
-
-    const animate = () => {
-      setCurrentPos((prev) => {
-        const nextX = prev.x + (targetPos.x - prev.x) * lerpFactor;
-        const nextY = prev.y + (targetPos.y - prev.y) * lerpFactor;
-        return { x: nextX, y: nextY };
-      });
-      animFrameId = requestAnimationFrame(animate);
-    };
-
-    animFrameId = requestAnimationFrame(animate);
-
-    return () => cancelAnimationFrame(animFrameId);
-  }, [targetPos]);
-
-  // 🐾 마우스 이동 이벤트 Handler
-  const handleMouseMove = (e) => {
-    if (!contentRef.current) return;
-
-    const rect = contentRef.current.getBoundingClientRect();
-    const centerX = rect.left + rect.width / 2;
-    const centerY = rect.top + rect.height / 2;
-
-    const xRatio = (e.clientX - centerX) / (rect.width / 2);
-    const yRatio = (e.clientY - centerY) / (rect.height / 2);
-
-    // X, Y 목표 비중 설정
-    setTargetPos({
-      x: Math.max(-1, Math.min(1, xRatio)),
-      y: Math.max(-1, Math.min(1, yRatio))
-    });
-  };
-
-  // 🐾 마우스 벗어날 때 복귀
-  const handleMouseLeaveContent = () => {
-    setTargetPos({ x: 0, y: 0 });
-  };
 
   const handleDragEnter = (e) => {
     e.preventDefault();
@@ -269,17 +276,6 @@ function UploadBox({
     window.dispatchEvent(new CustomEvent('navigate-settings'));
   };
 
-  // 🐾 회전(rotate) + 커서 방향 약간의 공간 이동(translate) 조합으로 시선/고개 조아림 극대화
-  const maxRotateDeg = 16;
-  const maxTranslatePx = 10;
-
-  const rotateY = currentPos.x * maxRotateDeg;
-  const rotateX = -currentPos.y * maxRotateDeg;
-  const translateX = currentPos.x * maxTranslatePx;
-  const translateY = currentPos.y * maxTranslatePx;
-
-  const mouseTransform = `perspective(1000px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) translateX(${translateX.toFixed(2)}px) translateY(${translateY.toFixed(2)}px)`;
-
   return (
     <div 
       style={{
@@ -322,18 +318,16 @@ function UploadBox({
         </div>
       )}
       
-      {/* 🐾 중앙 클릭/드래그 타깃 (관성 트래킹 연동) */}
+      {/* 🐾 중앙 클릭/드래그 타깃 (화면 전체 연동 인터랙션) */}
       <div 
         ref={contentRef}
-        style={styles.clickableContent(isDragActive, mouseTransform)}
+        style={styles.clickableContent(isDragActive)}
         onClick={handleContentClick}
-        onMouseMove={handleMouseMove}
-        onMouseLeave={handleMouseLeaveContent}
       >
         <div style={styles.logoWrapper}>
           <img 
-            src={aiMeowLogo} 
-            alt="AI Meow Main Logo" 
+            src={catFrames[currentFrameIndex]} 
+            alt="AI Meow Interactive Logo" 
             style={styles.logoImg(isDragActive)}
           />
         </div>
