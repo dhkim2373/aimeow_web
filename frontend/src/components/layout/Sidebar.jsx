@@ -146,7 +146,7 @@ function Sidebar(props) {
           <div style={styles.iconBadge(activeMenu === 'settings' || activeMenu === 'rag-settings')}>
             ⚙️
           </div>
-          <span style={{ letterSpacing: '-0.3px' }}>Target API / RAG 설정</span>
+          <span style={{ letterSpacing: '-0.3px' }}>Target API 설정</span>
         </button>
       </div>
 

@@ -2,6 +2,7 @@ import os
 import io
 import uuid
 import base64
+import re
 import requests
 import asyncio
 import fitz  # 🐾 PyMuPDF (PyMuPDF4LLM 기반 고속 처리)
@@ -15,25 +16,82 @@ from routers.settings import get_config  # RAG 연동 설정 조회
 router = APIRouter(prefix="/api", tags=["Image Chunking"])
 
 
-def upload_to_external_image_server(local_file_path: str, upload_api_url: str, auth_token: Optional[str] = None) -> Optional[str]:
-    """등록된 외부/운영 이미지 서버로 파일을 업로드하고 영구 URL 수신"""
+def strip_markdown(text_content: str) -> str:
+    """마크다운 태그, 강조, 헤더 및 HTML 줄바꿈 제거"""
+    if not text_content: 
+        return ""
+    text_content = re.sub(r'<br\s*/?>', ' ', text_content, flags=re.IGNORECASE)
+    text_content = re.sub(r'#{1,6}\s+', '', text_content)
+    text_content = re.sub(r'\*\*([^*]+)\*\*?', r'\1', text_content)
+    text_content = re.sub(r'\*([^*]+)\*', r'\1', text_content)
+    lines = [line.strip() for line in text_content.split('\n') if line.strip()]
+    return "\n".join(lines)
+
+
+def get_nested_value(d: dict, key_path: str):
+    """점 표기법(data.url)으로 중첩된 dict 값을 안전하게 추출하는 헬퍼 함수"""
+    keys = key_path.split('.')
+    current = d
+    for k in keys:
+        if isinstance(current, dict) and k in current:
+            current = current[k]
+        else:
+            return None
+    return str(current) if current else None
+
+
+def upload_to_external_image_server(
+    local_file_path: str, 
+    upload_api_url: str, 
+    auth_token: Optional[str] = None,
+    file_field_name: Optional[str] = "file",
+    response_url_key: Optional[str] = "auto"
+) -> Optional[str]:
+    """
+    등록된 외부/운영 이미지 서버로 파일을 업로드하고 영구 URL 수신
+    - URL 내 {key} / {api_key} 템플릿 자동 치환
+    - Form Data 파일 키 동적 지원 (file, image 등)
+    - 지정된 응답 JSON 키 경로(data.url 등) 동적 파싱 지원
+    """
     try:
         headers = {}
-        if auth_token and auth_token.strip():
-            headers["Authorization"] = f"Bearer {auth_token.strip()}"
+        target_url = upload_api_url.strip()
+        clean_token = auth_token.strip() if auth_token else ""
+
+        # 1. URL 내 템플릿 변수({key}, {api_key}, {token}) 치환
+        if clean_token:
+            target_url = target_url.replace("{key}", clean_token)\
+                                   .replace("{api_key}", clean_token)\
+                                   .replace("{token}", clean_token)
+            
+            if "{key}" not in upload_api_url and "{api_key}" not in upload_api_url:
+                headers["Authorization"] = f"Bearer {clean_token}"
+
+        # 2. Form Data 파일 키 지정 (기본값: file)
+        field_key = file_field_name.strip() if file_field_name and file_field_name.strip() else "file"
 
         with open(local_file_path, "rb") as f:
-            files = {"file": f}
-            response = requests.post(upload_api_url.strip(), files=files, headers=headers, timeout=10)
+            files = {field_key: f}
+            response = requests.post(target_url, files=files, headers=headers, timeout=15)
 
         if response.status_code in [200, 201]:
             res_json = response.json()
+            
+            # 3. 지정된 response_url_key(예: "data.url")로 값 파싱
+            if response_url_key and response_url_key.strip() != "auto":
+                parsed_url = get_nested_value(res_json, response_url_key.strip())
+                if parsed_url:
+                    return parsed_url
+
+            # 4. "auto"이거나 지정 키로 못 찾은 경우 자동 폴백 탐색
             remote_url = (
                 res_json.get("url")
                 or res_json.get("image_url")
                 or res_json.get("link")
                 or res_json.get("location")
-                or res_json.get("data", {}).get("url")
+                or (res_json.get("data", {}) if isinstance(res_json.get("data"), dict) else {}).get("url")
+                or (res_json.get("data", {}) if isinstance(res_json.get("data"), dict) else {}).get("display_url")
+                or (res_json.get("data", {}) if isinstance(res_json.get("data"), dict) else {}).get("link")
             )
             return remote_url
         else:
@@ -84,14 +142,12 @@ async def extract_images(
 
         # 2. PDF 문서 파일 처리 (PyMuPDF / fitz 기반 고속 이미지 렌더링)
         elif filename.endswith('.pdf'):
-            # 메모리 내 바이트 스트림으로 PDF 로드
             pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
 
             for page_idx in range(len(pdf_doc)):
                 page_num = page_idx + 1
                 page = pdf_doc[page_idx]
 
-                # 150 DPI 고화질 픽스맵 렌더링 (72 DPI 기준 150/72 ≈ 2.083 배율)
                 zoom = 150 / 72
                 mat = fitz.Matrix(zoom, zoom)
                 pix = page.get_pixmap(matrix=mat, alpha=False)
@@ -100,10 +156,8 @@ async def extract_images(
                 save_filename = f"{image_id}.png"
                 save_path = os.path.join(user_img_dir, save_filename)
 
-                # PNG 파일 디스크 저장
                 pix.save(save_path)
 
-                # Base64 인코딩용 이미지 바이트 수집
                 img_bytes = pix.tobytes("png")
                 base64_data = base64.b64encode(img_bytes).decode('utf-8')
 
@@ -132,7 +186,8 @@ async def extract_images(
 @router.post("/save-image-chunk")
 async def save_image_chunk(request: Request):
     """
-    🎯 이미지 정보 가공 후 고객사 웹훅(Target REST API)으로만 전송하는 엔드포인트
+    🎯 이미지 정보 가공 후 고객사 웹훅(Target REST API)으로 
+    source_filename, global_prefix, chunks([page_no, text]) 규격에 맞춰 전송
     """
     try:
         body = await request.json()
@@ -153,6 +208,7 @@ async def save_image_chunk(request: Request):
         global_prefix = str(raw_prefix) if raw_prefix and isinstance(raw_prefix, str) else ""
 
         source_filename = str(body.get("source_filename") or body.get("sourceFilename") or "IMAGE_INPUT")
+        page_number = int(body.get("page_number") or body.get("pageNumber") or 1)
         
         input_image_url = str(
             body.get("image_url") 
@@ -168,8 +224,12 @@ async def save_image_chunk(request: Request):
         image_type = str(body.get("image_type") or body.get("imageType") or "TABLE")
         tags = str(body.get("tags") or "")
 
-        ext_upload_url = str(body.get("external_image_upload_url") or body.get("externalImageUploadUrl") or "")
-        ext_token = str(body.get("external_image_token") or body.get("externalImageToken") or "")
+        # 설정 조회 및 외부 이미지 업로드 설정 추출
+        saved_config = get_config()
+        ext_upload_url = str(body.get("external_image_upload_url") or body.get("externalImageUploadUrl") or saved_config.get("image_upload_url") or "")
+        ext_token = str(body.get("external_image_token") or body.get("externalImageToken") or saved_config.get("image_server_token") or "")
+        file_field_name = str(body.get("file_field_name") or saved_config.get("file_field_name") or "file")
+        response_url_key = str(body.get("response_url_key") or saved_config.get("response_url_key") or "auto")
 
         # 2. 외부 이미지 서버 이관 업로드 처리
         if ext_upload_url and ext_upload_url.strip() and input_image_url:
@@ -181,22 +241,29 @@ async def save_image_chunk(request: Request):
                 remote_url = upload_to_external_image_server(
                     local_file_path=local_image_path,
                     upload_api_url=ext_upload_url.strip(),
-                    auth_token=ext_token
+                    auth_token=ext_token,
+                    file_field_name=file_field_name,
+                    response_url_key=response_url_key
                 )
                 if remote_url:
                     final_image_url = remote_url
 
-        # 3. 텍스트/메타데이터 정제 및 본문 가공
-        prefix_str = global_prefix.strip() if global_prefix else ""
-        manual_text = ocr_text.strip() if ocr_text else ""
+        # 3. 텍스트/메타데이터 정제 및 본문 가공 (마크다운 정제 적용)
         caption_str = f"캡션: {caption}\n" if caption else ""
         type_str = f"유형: {image_type}\n" if image_type else ""
         tag_str = f"태그: {tags}\n" if tags else ""
         
-        content_body = f"![이미지]({final_image_url})\n\n{caption_str}{type_str}{tag_str}\n{manual_text}".strip()
+        raw_content_body = f"![이미지]({final_image_url})\n\n{caption_str}{type_str}{tag_str}\n{ocr_text.strip()}".strip()
+        clean_plain_text = strip_markdown(raw_content_body)
 
-        # 4. 설정된 고객사 Target REST API (웹훅) 주소 확보
-        saved_config = get_config()
+        # 4. global_prefix가 있는 경우 맨 앞에 [Prefix] 형태로 삽입
+        clean_prefix = strip_markdown(global_prefix)
+        if clean_prefix:
+            final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
+        else:
+            final_text = clean_plain_text
+
+        # 5. 설정된 고객사 Target REST API (웹훅) 주소 확보
         target_url = body.get("target_api_url") or saved_config.get("target_api_url")
         api_key = body.get("api_key") or saved_config.get("api_key")
 
@@ -206,23 +273,20 @@ async def save_image_chunk(request: Request):
                 detail="설정된 Target REST API (Webhook) URL이 없습니다. RAG 연동 설정을 확인해 주세요."
             )
 
-        # 5. 웹훅 전송 규격 데이터 포맷팅
+        # 6. 최신 웹훅 전송 규격 데이터 포맷팅 (source_filename 상위, chunks 내부 page_no, text)
         webhook_payload = {
             "user_name": user_name,
-            "global_prefix": prefix_str,
+            "global_prefix": clean_prefix,
             "source_filename": source_filename,
             "chunks": [
                 {
-                    "line_index": "0",
-                    "page_number": 1,
-                    "text": content_body,
-                    "is_split_point": True,
-                    "is_deleted": False
+                    "page_no": str(page_number),
+                    "text": final_text
                 }
             ]
         }
 
-        # 6. 동기 HTTP 요청을 별도 스레드로 분리하여 셀프 데드락 방지
+        # 7. 동기 HTTP 요청을 별도 스레드로 분리하여 셀프 데드락 방지
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

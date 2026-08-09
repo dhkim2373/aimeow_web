@@ -56,7 +56,6 @@ const styles = {
     color: '#64748b',
     marginBottom: '8px'
   },
-  /* 🎯 POST 뱃지 + Input 통합 Wrapper 스타일 */
   inputWrapper: {
     display: 'flex',
     alignItems: 'center',
@@ -97,7 +96,8 @@ const styles = {
     fontSize: '13px',
     outline: 'none',
     boxSizing: 'border-box',
-    backgroundColor: '#ffffff'
+    backgroundColor: '#ffffff',
+    fontFamily: 'monospace'
   },
   saveBtn: {
     backgroundColor: '#2563eb',
@@ -182,12 +182,14 @@ function SettingsPage() {
   // 2. 외부 이미지 서버 연동 설정 상태
   const [imageUploadUrl, setImageUploadUrl] = useState('');
   const [imageServerToken, setImageServerToken] = useState('');
+  const [fileFieldName, setFileFieldName] = useState('file');
+  const [responseUrlKey, setResponseUrlKey] = useState('auto'); // 🎯 응답 JSON URL 키 경로 기본값 'auto'
 
   // 3. UI 및 복사 관련 피드백 상태
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // 🎯 백엔드 WebhookPayload 표준 규격 샘플 JSON
+  // 🎯 백엔드 WebhookPayload 최신 표준 규격 샘플 JSON
   const sampleWebhookPayload = {
     "user_name": "admin",
     "global_prefix": "의약품3PL_인터페이스명세서",
@@ -213,6 +215,8 @@ function SettingsPage() {
           setApiKey(data.api_key || '');
           setImageUploadUrl(data.image_upload_url || '');
           setImageServerToken(data.image_server_token || '');
+          setFileFieldName(data.file_field_name || 'file');
+          setResponseUrlKey(data.response_url_key || 'auto');
         }
       })
       .catch(err => {
@@ -228,7 +232,9 @@ function SettingsPage() {
         target_api_url: targetApiUrl.trim(),
         api_key: apiKey.trim(),
         image_upload_url: imageUploadUrl.trim(),
-        image_server_token: imageServerToken.trim()
+        image_server_token: imageServerToken.trim(),
+        file_field_name: fileFieldName.trim() || 'file',
+        response_url_key: responseUrlKey.trim() || 'auto'
       });
       alert("🐾 RAG 연동 및 이미지 서버 설정이 성공적으로 저장되었습니다!");
     } catch (err) {
@@ -267,7 +273,6 @@ function SettingsPage() {
             정제 완료된 청크 데이터를 <strong style={{ color: '#2563eb' }}>HTTP POST (JSON)</strong> 방식으로 수신할 고객사의 REST API 엔드포인트입니다.
           </div>
           
-          {/* 🎯 POST 메서드 시각화 뱃지가 적용된 Input Wrapper */}
           <div style={styles.inputWrapper}>
             <span style={styles.methodBadge}>POST</span>
             <input 
@@ -284,7 +289,7 @@ function SettingsPage() {
           <label style={styles.label}>🔑 Authorization Bearer Token (선택 사항)</label>
           <div style={styles.subText}>인증이 필요한 REST API인 경우 토큰값을 입력하세요.</div>
           <input 
-            type="password" 
+            type="text" 
             placeholder="your-secret-bearer-token" 
             value={apiKey}
             onChange={(e) => setApiKey(e.target.value)}
@@ -339,19 +344,14 @@ function SettingsPage() {
                 <td style={styles.td}>정제된 청크 데이터 목록</td>
               </tr>
               <tr>
-                <td style={{ ...styles.td, color: '#c084fc', fontFamily: 'monospace', paddingLeft: '20px' }}>└ line_index</td>
+                <td style={{ ...styles.td, color: '#c084fc', fontFamily: 'monospace', paddingLeft: '20px' }}>└ page_no</td>
                 <td style={{ ...styles.td, color: '#4ade80' }}>string</td>
-                <td style={styles.td}>라인 / 청크 순번 Index</td>
-              </tr>
-              <tr>
-                <td style={{ ...styles.td, color: '#c084fc', fontFamily: 'monospace', paddingLeft: '20px' }}>└ page_number</td>
-                <td style={{ ...styles.td, color: '#f87171' }}>number</td>
-                <td style={styles.td}>소속 페이지 번호</td>
+                <td style={styles.td}>소속 페이지 또는 페이지 범위 (예: "1", "1~3")</td>
               </tr>
               <tr>
                 <td style={{ ...styles.td, color: '#c084fc', fontFamily: 'monospace', paddingLeft: '20px' }}>└ text</td>
                 <td style={{ ...styles.td, color: '#4ade80' }}>string</td>
-                <td style={styles.td}>정제된 순수 텍스트 본문 (마크다운 배제)</td>
+                <td style={styles.td}>[Prefix]가 포함된 정제 완료 순수 텍스트 본문</td>
               </tr>
             </tbody>
           </table>
@@ -372,14 +372,15 @@ function SettingsPage() {
         <div>
           <label style={styles.label}>🌐 Image Upload REST API URL</label>
           <div style={styles.subText}>
-            등록 시 DB 적재 직전에 로컬 임시 이미지를 해당 서버로 업로드하여, <b>반환받은 영구 URL</b>로 교체하여 저장합니다.
+            등록 시 DB 적재 직전에 로컬 임시 이미지를 해당 서버로 업로드하여, <b>반환받은 영구 URL</b>로 교체하여 저장합니다.<br/>
+            <span style={{ color: '#2563eb' }}>* ImgBB 등 Query Param으로 토큰을 전달받는 서버는 URL에 <code>{"{key}"}</code> 파라미터를 명시하면 아래 토큰값으로 치환됩니다.</span>
           </div>
           
           <div style={styles.inputWrapper}>
             <span style={styles.methodBadge}>POST</span>
             <input 
               type="text" 
-              placeholder="예: https://img-server.company.com/api/v1/upload" 
+              placeholder="예: https://api.imgbb.com/1/upload?expiration=600&key={key}" 
               value={imageUploadUrl}
               onChange={(e) => setImageUploadUrl(e.target.value)}
               style={styles.inputInWrapper}
@@ -388,11 +389,41 @@ function SettingsPage() {
         </div>
 
         <div>
-          <label style={styles.label}>🔑 Image Server Authorization Token (선택 사항)</label>
-          <div style={styles.subText}>이미지 업로드 API 호출 시 필요한 인증 토큰입니다.</div>
+          <label style={styles.label}>📁 Form Data File Key Name (기본값: file)</label>
+          <div style={styles.subText}>
+            이미지 업로드 multipart/form-data 요청 시 이미지 파일이 담기는 파라미터 키 이름입니다. (일반 API: <b>file</b>, ImgBB: <b>image</b>)
+          </div>
           <input 
-            type="password" 
-            placeholder="image-server-access-token" 
+            type="text" 
+            placeholder="file 또는 image" 
+            value={fileFieldName}
+            onChange={(e) => setFileFieldName(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div>
+          <label style={styles.label}>🔍 Response Image URL Key Path (기본값: auto)</label>
+          <div style={styles.subText}>
+            업로드 후 반환되는 JSON 응답에서 이미지 영구 URL이 위치한 키 경로입니다. 중첩 구조는 점(<code>.</code>)으로 구분합니다. (ImgBB: <b>data.url</b>, Imgur: <b>data.link</b>, 일반 API: <b>url</b> 또는 <b>auto</b>)
+          </div>
+          <input 
+            type="text" 
+            placeholder="auto 또는 data.url" 
+            value={responseUrlKey}
+            onChange={(e) => setResponseUrlKey(e.target.value)}
+            style={styles.input}
+          />
+        </div>
+
+        <div>
+          <label style={styles.label}>🔑 Image Server Authorization Token / API Key (선택 사항)</label>
+          <div style={styles.subText}>
+            이미지 업로드 API 호출 시 필요한 인증 토큰 또는 API 키입니다. (Bearer 토큰 또는 <code>{"{key}"}</code> 치환값으로 사용됩니다)
+          </div>
+          <input 
+            type="text" 
+            placeholder="image-server-access-token 또는 YOUR_IMGBB_API_KEY" 
             value={imageServerToken}
             onChange={(e) => setImageServerToken(e.target.value)}
             style={styles.input}
