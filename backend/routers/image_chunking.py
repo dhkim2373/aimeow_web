@@ -4,11 +4,10 @@ import uuid
 import base64
 import requests
 import asyncio
+import fitz  # 🐾 PyMuPDF (PyMuPDF4LLM 기반 고속 처리)
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from PIL import Image
-import pdfplumber
-from pdf2image import convert_from_bytes
 
 from config import get_user_workspace, settings
 from routers.settings import get_config  # RAG 연동 설정 조회
@@ -53,7 +52,7 @@ async def extract_images(
 ):
     """
     PDF 또는 이미지 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 추출
-    (PyMuPDF/fitz 제거 -> pdf2image + pdfplumber 적용)
+    🎯 (Poppler/pdf2image 의존성 없이 PyMuPDF로 고속 추출)
     """
     filename = file.filename.lower()
     file_bytes = await file.read()
@@ -83,39 +82,29 @@ async def extract_images(
                 "image_data_base64": f"data:image/{ext};base64,{base64_data}"
             })
 
-        # 2. PDF 문서 파일 처리 (pdf2image + pdfplumber)
+        # 2. PDF 문서 파일 처리 (PyMuPDF / fitz 기반 고속 이미지 렌더링)
         elif filename.endswith('.pdf'):
-            # 🎯 [크로스 플랫폼 Poppler 경로 자동 감지 로직]
-            poppler_path = None
-            
-            # 1) Windows 환경 설정값 우선 확인 (설정 경로가 실제로 존재할 때만 적용)
-            if settings.POPPLER_PATH and os.path.exists(settings.POPPLER_PATH.strip()):
-                poppler_path = settings.POPPLER_PATH.strip()
-            # 2) Linux/Docker 환경 표준 설치 경로 탐색
-            elif os.path.exists("/usr/bin/pdftoppm"):
-                poppler_path = "/usr/bin"
+            # 메모리 내 바이트 스트림으로 PDF 로드
+            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
 
-            print(f"🔍 [PDF 파싱] 적용된 Poppler 경로: {poppler_path if poppler_path else '시스템 기본 PATH 탐색'}")
-
-            # PDF 바이트 스트림 -> PIL Image 객체 리스트 변환 (DPI 150)
-            if poppler_path:
-                pdf_images = convert_from_bytes(file_bytes, dpi=150, poppler_path=poppler_path)
-            else:
-                pdf_images = convert_from_bytes(file_bytes, dpi=150)
-
-            for page_idx, pil_img in enumerate(pdf_images):
+            for page_idx in range(len(pdf_doc)):
                 page_num = page_idx + 1
+                page = pdf_doc[page_idx]
+
+                # 150 DPI 고화질 픽스맵 렌더링 (72 DPI 기준 150/72 ≈ 2.083 배율)
+                zoom = 150 / 72
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+
                 image_id = f"img_p{page_num}_{uuid.uuid4().hex[:4]}"
                 save_filename = f"{image_id}.png"
                 save_path = os.path.join(user_img_dir, save_filename)
 
-                # PNG 파일로 디스크 저장
-                pil_img.save(save_path, "PNG")
+                # PNG 파일 디스크 저장
+                pix.save(save_path)
 
-                # 메모리 버퍼를 활용한 Base64 인코딩
-                buffer = io.BytesIO()
-                pil_img.save(buffer, format="PNG")
-                img_bytes = buffer.getvalue()
+                # Base64 인코딩용 이미지 바이트 수집
+                img_bytes = pix.tobytes("png")
                 base64_data = base64.b64encode(img_bytes).decode('utf-8')
 
                 full_static_url = f"{base_url}/static/{user_id}/images/{save_filename}"
@@ -126,6 +115,8 @@ async def extract_images(
                     "preview_url": full_static_url,
                     "image_data_base64": f"data:image/png;base64,{base64_data}"
                 })
+
+            pdf_doc.close()
 
         return {
             "status": "success",
@@ -141,7 +132,7 @@ async def extract_images(
 @router.post("/save-image-chunk")
 async def save_image_chunk(request: Request):
     """
-    🎯 이미지 정보 가공 후 고객사 웹훅(Target REST API)으로만 전송하는 엔드포인트 (타임아웃 및 데드락 방지 적용)
+    🎯 이미지 정보 가공 후 고객사 웹훅(Target REST API)으로만 전송하는 엔드포인트
     """
     try:
         body = await request.json()
@@ -231,7 +222,7 @@ async def save_image_chunk(request: Request):
             ]
         }
 
-        # 6. 동기 HTTP 요청을 별도 스레드로 분리하여 셀프 데드락(Read Timed Out) 방지
+        # 6. 동기 HTTP 요청을 별도 스레드로 분리하여 셀프 데드락 방지
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

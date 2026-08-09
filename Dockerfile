@@ -13,23 +13,13 @@ COPY frontend/ .
 RUN npm run build
 
 # ==========================================
-# STAGE 2: Python FastAPI 백엔드 및 통합 실행 환경 구축
+# STAGE 2: Python FastAPI 백엔드 및 통합 실행 환경 구축 (PyMuPDF 기반 경량화)
 # ==========================================
 FROM python:3.11-slim
 
 WORKDIR /app/backend
 
-# 🐾 PDF/이미지 청킹 처리에 필요한 poppler 패키지 및 C/C++ 빌드 의존성 설치
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    g++ \
-    poppler-utils \
-    libpoppler-cpp-dev \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# pip 최신화 및 백엔드 의존성 라이브러리 설치
+# pip 최신화 및 백엔드 의존성 라이브러리 설치 (PyMuPDF 기반)
 COPY backend/requirements.txt ./
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt

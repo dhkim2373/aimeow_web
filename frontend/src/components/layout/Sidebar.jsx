@@ -60,7 +60,7 @@ const styles = {
     color: active ? '#ffffff' : '#64748b',
     transition: 'all 0.2s ease'
   }),
-  // 🐾 하단 Apache 2.0 및 GitHub 고지 스타일
+  // 🐾 하단 라이선스 및 GitHub 고지 스타일
   footerArea: {
     borderTop: '1px solid #f1f5f9',
     paddingTop: '16px',
@@ -150,12 +150,12 @@ function Sidebar(props) {
         </button>
       </div>
 
-      {/* 🐾 사이드바 최하단: Apache 2.0 라이선스 & GitHub 링크 고정 영역 */}
+      {/* 🐾 사이드바 최하단: AGPL 3.0 라이선스 & GitHub 링크 고정 영역 */}
       <div style={styles.footerArea}>
-        {/* 라이선스 표기 */}
+        {/* 라이선스 표기 (PyMuPDF4LLM 기반 AGPL-3.0 적용) */}
         <div style={styles.licenseBadge}>
           <span>License</span>
-          <span style={{ color: '#0f172a', fontWeight: '800' }}>Apache-2.0</span>
+          <span style={{ color: '#0f172a', fontWeight: '800' }}>AGPL-3.0</span>
         </div>
 
         {/* GitHub 저장소 링크 */}
