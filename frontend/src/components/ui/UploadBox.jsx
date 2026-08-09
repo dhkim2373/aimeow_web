@@ -1,17 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
+import aiMeowLogo from '../../assets/aimeow-logo.png';
 import { fetchServerConfigApi } from '../../api/chunkingApi';
-
-// 🐾 3방향 고양이 시선 이미지 import (m10, center, p10)
-import catM10 from '../../assets/cat_angle_m10.png';
-import catCenter from '../../assets/cat_angle.png'; // 정면
-import catP10 from '../../assets/cat_angle_p10.png';
-
-// 왼쪽(-10°), 정면(0°), 오른쪽(+10°) 순서대로 3장 정렬
-const catFrames = [
-  catM10,
-  catCenter,
-  catP10
-];
 
 const styles = {
   dropZone: { 
@@ -56,18 +45,16 @@ const styles = {
     width: '210px',
     height: '210px',
     overflow: 'hidden',
-    pointerEvents: 'none',
-    perspective: '1000px' // 🐾 3D 미세 회전용 공간
+    pointerEvents: 'none'
   },
-  logoImg: (isDragActive, rotateY) => ({
+  logoImg: (isDragActive) => ({
     width: '100%',
     height: '100%',
     objectFit: 'contain',
-    transform: `rotateY(${rotateY}deg)`, // 🐾 이미지 교체 시 미세 3D 기울임 추가
-    transition: 'transform 0.15s ease-out, filter 0.2s ease-in-out',
     filter: isDragActive 
       ? 'drop-shadow(0 12px 24px rgba(59, 130, 246, 0.45)) scale(1.06)' 
       : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.12))',
+    transition: 'filter 0.2s ease-in-out, transform 0.2s ease-in-out',
     userSelect: 'none',
     pointerEvents: 'none',
     WebkitUserDrag: 'none'
@@ -164,55 +151,10 @@ function UploadBox({
 }) {
   const [isDragActive, setIsDragActive] = useState(false);
   const [hasTargetUrl, setHasTargetUrl] = useState(true);
-  
-  // 🐾 현재 단일 이미지 Index (0: 좌, 1: 정면, 2: 우)
-  const [currentFrameIndex, setCurrentFrameIndex] = useState(1);
-  // 🐾 미세 3D 기울임 각도 (-8deg ~ +8deg)
-  const [rotateY, setRotateY] = useState(0);
 
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
   const contentRef = useRef(null);
-
-  // 🎯 이미지 프리로딩(Preload)
-  useEffect(() => {
-    catFrames.forEach((src) => {
-      const img = new Image();
-      img.src = src;
-    });
-  }, []);
-
-  // 🐾 화면 전체 마우스 위치 계산 (인덱스 지정 + 미세 3D 회전)
-  useEffect(() => {
-    const handleGlobalMouseMove = (e) => {
-      if (!contentRef.current) return;
-
-      const rect = contentRef.current.getBoundingClientRect();
-      const centerX = rect.left + rect.width / 2;
-
-      // -1.0 ~ 1.0 비율 계산
-      const xRatio = (e.clientX - centerX) / (window.innerWidth / 2);
-      const clampedRatio = Math.max(-1, Math.min(1, xRatio));
-
-      // 1. 단일 프레임 결정 (0, 1, 2 중 무조건 1개만 선택)
-      if (clampedRatio < -0.33) {
-        setCurrentFrameIndex(0); // 좌측 시선
-      } else if (clampedRatio > 0.33) {
-        setCurrentFrameIndex(2); // 우측 시선
-      } else {
-        setCurrentFrameIndex(1); // 정면 시선
-      }
-
-      // 2. 미세 3D 회전 각도 세팅 (최대 8도만 회전)
-      setRotateY(clampedRatio * 8);
-    };
-
-    window.addEventListener('mousemove', handleGlobalMouseMove);
-
-    return () => {
-      window.removeEventListener('mousemove', handleGlobalMouseMove);
-    };
-  }, []);
 
   // 🎯 Target REST API URL 설정 유무 점검
   useEffect(() => {
@@ -368,7 +310,7 @@ function UploadBox({
         </div>
       )}
       
-      {/* 🐾 중앙 클릭/드래그 타깃 (단일 이미지 렌더링 + 미세 회전) */}
+      {/* 🐾 중앙 클릭/드래그 타깃 */}
       <div 
         ref={contentRef}
         style={styles.clickableContent(isDragActive)}
@@ -376,10 +318,10 @@ function UploadBox({
       >
         <div style={styles.logoWrapper}>
           <img 
-            src={catFrames[currentFrameIndex]} 
-            alt="AI Meow Interactive Logo" 
+            src={aiMeowLogo} 
+            alt="AI Meow Main Logo" 
             draggable={false}
-            style={styles.logoImg(isDragActive, rotateY)}
+            style={styles.logoImg(isDragActive)}
           />
         </div>
 
