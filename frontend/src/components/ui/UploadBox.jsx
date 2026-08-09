@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import aiMeowLogo from '../../assets/aimeow-logo.png';
+import catPlayVideo from '../../assets/cat_play.mp4';
 import { fetchServerConfigApi } from '../../api/chunkingApi';
 
 const styles = {
@@ -44,20 +44,20 @@ const styles = {
     alignItems: 'center',
     width: '210px',
     height: '210px',
+    borderRadius: '50%', // 비디오를 동그랗게 얹고 싶다면 사용 (필요 없으면 제거 가능)
     overflow: 'hidden',
     pointerEvents: 'none'
   },
-  logoImg: (isDragActive) => ({
+  logoVideo: (isDragActive) => ({
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
+    objectFit: 'cover', // 영상을 영역에 맞춰 깔끔하게 채움
     filter: isDragActive 
       ? 'drop-shadow(0 12px 24px rgba(59, 130, 246, 0.45)) scale(1.06)' 
       : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.12))',
     transition: 'filter 0.2s ease-in-out, transform 0.2s ease-in-out',
     userSelect: 'none',
-    pointerEvents: 'none',
-    WebkitUserDrag: 'none'
+    pointerEvents: 'none'
   }),
   mainText: { 
     fontWeight: '800', 
@@ -310,18 +310,20 @@ function UploadBox({
         </div>
       )}
       
-      {/* 🐾 중앙 클릭/드래그 타깃 */}
+      {/* 🐾 중앙 클릭/드래그 타깃 (동영상 로고 연동) */}
       <div 
         ref={contentRef}
         style={styles.clickableContent(isDragActive)}
         onClick={handleContentClick}
       >
         <div style={styles.logoWrapper}>
-          <img 
-            src={aiMeowLogo} 
-            alt="AI Meow Main Logo" 
-            draggable={false}
-            style={styles.logoImg(isDragActive)}
+          <video 
+            src={catPlayVideo} 
+            autoPlay 
+            loop 
+            muted 
+            playsInline
+            style={styles.logoVideo(isDragActive)}
           />
         </div>
 
