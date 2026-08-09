@@ -30,37 +30,42 @@ async def upload_pdf(
         response_data = []
         global_line_idx = 0
         
-        # 🎯 1. PyMuPDF4LLM을 활용한 페이지 단위 마크다운 파싱 (page_chunks=True)
+        # 🎯 1. PyMuPDF4LLM을 활용한 페이지 청크 파싱
         md_pages = pymupdf4llm.to_markdown(file_path, page_chunks=True)
 
-        # 🎯 2. 페이지별 마크다운 라인 순회 및 구조화
-        for page_data in md_pages:
-            # pymupdf4llm의 page_chunks 딕셔너리 구조: {'metadata': {'page': 0, ...}, 'text': '...'}
-            page_metadata = page_data.get("metadata", {})
-            current_page_num = page_metadata.get("page", 0) + 1  # 0-indexed -> 1-indexed 변환
+        # 🎯 2. enumerate 순회로 정확한 페이지 번호 보장
+        for page_idx, page_data in enumerate(md_pages):
+            page_metadata = page_data.get("metadata", {}) if isinstance(page_data, dict) else {}
             
-            raw_text = page_data.get("text", "")
+            # 메타데이터에서 page_number/page 탐색 -> 없을 경우 enumerate의 page_idx + 1 사용
+            current_page_num = (
+                page_metadata.get("page_number") 
+                or (page_metadata.get("page") + 1 if page_metadata.get("page") is not None else None)
+                or (page_idx + 1)
+            )
             
-            # 줄바꿈 단위로 분할하여 프론트엔드 에디터 포맷에 맞게 조립
+            raw_text = page_data.get("text", "") if isinstance(page_data, dict) else str(page_data)
+            
+            # 줄바꿈 단위 분할
             lines = raw_text.split('\n')
             
             for line in lines:
                 clean_line = line.strip()
                 if not clean_line:
-                    continue  # 완전히 빈 줄은 제외
+                    continue  # 완전히 빈 줄 제외
                 
                 response_data.append({
                     "line_index": str(global_line_idx),
                     "text": clean_line,
                     "is_split_point": False,
                     "is_deleted": False,
-                    "page_number": current_page_num,
+                    "page_number": int(current_page_num), # 🎯 정확한 페이지 번호 전달
                     "source_filename": file.filename,
                     "user_id": user_id
                 })
                 global_line_idx += 1
 
-        print(f"📑 [PyMuPDF 파싱 성공] 소요시간: {time.time() - t_start:.2f}초 | 파싱 완료 총 라인: {global_line_idx}개")
+        print(f"📑 [PyMuPDF 파싱 성공] 소요시간: {time.time() - t_start:.2f}초 | 총 {len(md_pages)}페이지 / {global_line_idx}개 라인 파싱 완료")
         return response_data
 
     except Exception as e:
