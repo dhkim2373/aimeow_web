@@ -56,6 +56,38 @@ const styles = {
     color: '#64748b',
     marginBottom: '8px'
   },
+  /* 🎯 POST 뱃지 + Input 통합 Wrapper 스타일 */
+  inputWrapper: {
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    border: '1px solid #cbd5e1',
+    borderRadius: '8px',
+    padding: '2px 8px',
+    marginBottom: '16px',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)'
+  },
+  methodBadge: {
+    backgroundColor: '#22c55e',
+    color: '#ffffff',
+    fontSize: '11px',
+    fontWeight: '900',
+    padding: '4px 8px',
+    borderRadius: '6px',
+    marginRight: '8px',
+    letterSpacing: '0.5px',
+    userSelect: 'none'
+  },
+  inputInWrapper: {
+    flex: 1,
+    border: 'none',
+    outline: 'none',
+    fontSize: '13px',
+    color: '#1e293b',
+    padding: '9px 4px',
+    fontFamily: 'monospace',
+    backgroundColor: 'transparent'
+  },
   input: {
     width: '100%',
     padding: '11px 14px',
@@ -164,7 +196,7 @@ function SettingsPage() {
       {
         "line_index": "0",
         "page_number": 1,
-        "text": "![이미지](http://aimeow.ddns.net:8100/static/default_user/images/img_p1_7df6.png)\n\n캡션: 변경 신청서\n유형: TABLE\n태그: 변경관리 SOP, 샘플\n\n[수동 입력 텍스트 또는 표 마크다운 내용]",
+        "text": "이미지 URL: http://aimeow.ddns.net:8100/static/default_user/images/img_p1_7df6.png\n캡션: 변경 신청서\n유형: TABLE\n태그: 변경관리 SOP, 샘플\n\n[수동 입력 텍스트 또는 표 정제 내용]",
         "is_split_point": true,
         "is_deleted": false
       }
@@ -230,14 +262,21 @@ function SettingsPage() {
 
         <div>
           <label style={styles.label}>Target Rest API URL (Webhook 수신주소)</label>
-          <div style={styles.subText}>정제 완료된 청크 데이터를 수신할 고객사의 REST API 엔드포인트입니다.</div>
-          <input 
-            type="text" 
-            placeholder="예: http://localhost:8000/api/webhook/ingest" 
-            value={targetApiUrl}
-            onChange={(e) => setTargetApiUrl(e.target.value)}
-            style={styles.input}
-          />
+          <div style={styles.subText}>
+            정제 완료된 청크 데이터를 <strong style={{ color: '#2563eb' }}>HTTP POST (JSON)</strong> 방식으로 수신할 고객사의 REST API 엔드포인트입니다.
+          </div>
+          
+          {/* 🎯 POST 메서드 시각화 뱃지가 적용된 Input Wrapper */}
+          <div style={styles.inputWrapper}>
+            <span style={styles.methodBadge}>POST</span>
+            <input 
+              type="text" 
+              placeholder="예: http://host.docker.internal:5678/webhook-test/..." 
+              value={targetApiUrl}
+              onChange={(e) => setTargetApiUrl(e.target.value)}
+              style={styles.inputInWrapper}
+            />
+          </div>
         </div>
 
         <div>
@@ -265,7 +304,7 @@ function SettingsPage() {
           </div>
 
           <div style={{ fontSize: '12px', color: '#94a3b8', marginBottom: '12px', lineHeight: '1.5' }}>
-            설정된 <b>Target REST API URL</b>로 전송되는 <code style={{ color: '#f43f5e', backgroundColor: '#1e293b', padding: '2px 4px', borderRadius: '4px' }}>POST</code> 표준 바디 포맷입니다. 수신 시스템 개발 시 아래 구조를 참조하세요.
+            설정된 <b>Target REST API URL</b>로 전송되는 <code style={{ color: '#4ade80', backgroundColor: '#1e293b', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>POST</code> 표준 바디 포맷입니다. 수신 시스템 개발 시 아래 구조를 참조하세요.
           </div>
 
           {/* 주요 필드 설명 구조표 */}
@@ -311,7 +350,7 @@ function SettingsPage() {
               <tr>
                 <td style={{ ...styles.td, color: '#c084fc', fontFamily: 'monospace', paddingLeft: '20px' }}>└ text</td>
                 <td style={{ ...styles.td, color: '#4ade80' }}>string</td>
-                <td style={styles.td}>정제된 마크다운 본문 (텍스트/이미지)</td>
+                <td style={styles.td}>정제된 순수 텍스트 본문 (마크다운 배제)</td>
               </tr>
             </tbody>
           </table>
@@ -334,13 +373,17 @@ function SettingsPage() {
           <div style={styles.subText}>
             등록 시 DB 적재 직전에 로컬 임시 이미지를 해당 서버로 업로드하여, <b>반환받은 영구 URL</b>로 교체하여 저장합니다.
           </div>
-          <input 
-            type="text" 
-            placeholder="예: https://img-server.company.com/api/v1/upload" 
-            value={imageUploadUrl}
-            onChange={(e) => setImageUploadUrl(e.target.value)}
-            style={styles.input}
-          />
+          
+          <div style={styles.inputWrapper}>
+            <span style={styles.methodBadge}>POST</span>
+            <input 
+              type="text" 
+              placeholder="예: https://img-server.company.com/api/v1/upload" 
+              value={imageUploadUrl}
+              onChange={(e) => setImageUploadUrl(e.target.value)}
+              style={styles.inputInWrapper}
+            />
+          </div>
         </div>
 
         <div>
