@@ -190,15 +190,16 @@ function SettingsPage() {
   // 🎯 백엔드 WebhookPayload 표준 규격 샘플 JSON
   const sampleWebhookPayload = {
     "user_name": "admin",
-    "global_prefix": "변경관리_SOP",
-    "source_filename": "sample_document.pdf",
+    "global_prefix": "의약품3PL_인터페이스명세서",
+    "source_filename": "표준_인터페이스정의서.pdf",
     "chunks": [
       {
-        "line_index": "0",
-        "page_number": 1,
-        "text": "이미지 URL: http://aimeow.ddns.net:8100/static/default_user/images/img_p1_7df6.png\n캡션: 변경 신청서\n유형: TABLE\n태그: 변경관리 SOP, 샘플\n\n[수동 입력 텍스트 또는 표 정제 내용]",
-        "is_split_point": true,
-        "is_deleted": false
+        "page_no": "1",
+        "text": "[의약품3PL_인터페이스명세서]\n\nInterface Specification\n표준 인터페이스정의서 GeoNet+ for 3PL (의약품)"
+      },
+      {
+        "page_no": "1~2",
+        "text": "[의약품3PL_인터페이스명세서]\n\n1.2.3 레이아웃 커스터마이징 및 데이터 매핑..."
       }
     ]
   };

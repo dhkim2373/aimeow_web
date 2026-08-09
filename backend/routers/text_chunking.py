@@ -84,31 +84,79 @@ async def upload_pdf(
         print(f"❌ PDF 파싱 실패: {str(e)}")
         raise HTTPException(status_code=500, detail=f"PDF 파싱 실패: {str(e)}")
 
-
 @router.post("/save-chunks")
 async def save_chunks(request: Request):
     """
-    🎯 텍스트 청크 저장 및 웹훅 전송 (마크다운 정제 적용)
+    🎯 텍스트 청크 저장 및 웹훅 전송 (chunks 내부: page_no, text 2개 필드로 경량화)
     """
     try:
         body = await request.json()
         print("📦 [수신된 텍스트 청크 저장 페이로드]:", body)
 
         user_name = str(body.get("user_name") or body.get("userName") or "admin")
-        global_prefix = str(body.get("global_prefix") or body.get("globalPrefix") or "")
-        source_filename = str(body.get("source_filename") or body.get("sourceFilename") or "TEXT_INPUT")
+        global_prefix = str(body.get("global_prefix") or body.get("globalPrefix") or "").strip()
+        source_filename = str(body.get("source_filename") or body.get("sourceFilename") or "TEXT_INPUT").strip()
         raw_chunks = body.get("chunks", [])
 
         if not raw_chunks:
             raise HTTPException(status_code=400, detail="전송할 청크 데이터가 존재하지 않습니다.")
 
-        # 🎯 마크다운 제거 처리 (strip_markdown 적용)
-        cleaned_chunks = []
-        for chk in raw_chunks:
-            chk_copy = dict(chk)
-            if "text" in chk_copy and chk_copy["text"]:
-                chk_copy["text"] = strip_markdown(chk_copy["text"])
-            cleaned_chunks.append(chk_copy)
+        formatted_chunks = []
+        current_chunk_buffer = []
+        chunk_page_start = None
+        chunk_page_end = None
+
+        for idx, item in enumerate(raw_chunks):
+            item_text = item.get("text", "") if isinstance(item, dict) else getattr(item, "text", "")
+            is_deleted = item.get("is_deleted", False) if isinstance(item, dict) else getattr(item, "is_deleted", False)
+            is_split_point = item.get("is_split_point", False) if isinstance(item, dict) else getattr(item, "is_split_point", False)
+            
+            raw_page = item.get("page_number") if isinstance(item, dict) else getattr(item, "page_number", 1)
+            try:
+                page_number = int(raw_page)
+            except (ValueError, TypeError):
+                page_number = 1
+
+            if is_deleted:
+                continue
+
+            if chunk_page_start is None:
+                chunk_page_start = page_number
+            chunk_page_end = page_number
+
+            current_chunk_buffer.append(item_text)
+
+            # 분할 지점(is_split_point)이거나 마지막 라인인 경우 청크 완성
+            if is_split_point or idx == len(raw_chunks) - 1:
+                raw_markdown_content = "\n".join(current_chunk_buffer).strip()
+
+                if raw_markdown_content:
+                    # 마크다운 정제 (순수 텍스트)
+                    clean_plain_text = strip_markdown(raw_markdown_content)
+
+                    # global_prefix가 있는 경우 맨 앞에 [Prefix] 형태로 삽입
+                    clean_prefix = strip_markdown(global_prefix)
+                    if clean_prefix:
+                        final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
+                    else:
+                        final_text = clean_plain_text
+
+                    # 페이지 범위 조합 ("1" 또는 "1~3")
+                    if chunk_page_start == chunk_page_end:
+                        page_no_str = str(chunk_page_start)
+                    else:
+                        page_no_str = f"{chunk_page_start}~{chunk_page_end}"
+
+                    # 🎯 chunks 배열 내부에서는 source_filename 제거 (page_no, text 만 포함)
+                    formatted_chunks.append({
+                        "page_no": page_no_str,
+                        "text": final_text
+                    })
+
+                # 다음 청크를 위한 상태 초기화
+                current_chunk_buffer = []
+                chunk_page_start = None
+                chunk_page_end = None
 
         # RAG 연동 설정 조회
         saved_config = get_config()
@@ -121,12 +169,12 @@ async def save_chunks(request: Request):
                 detail="설정된 Target REST API (Webhook) URL이 없습니다. RAG 연동 설정을 확인해 주세요."
             )
 
-        # 마크다운이 제거된 글로벌 프리픽스 및 청크 적용
+        # 🎯 웹훅 전송 최종 페이로드
         webhook_payload = {
             "user_name": user_name,
-            "global_prefix": strip_markdown(global_prefix.strip()),
+            "global_prefix": strip_markdown(global_prefix),
             "source_filename": source_filename,
-            "chunks": cleaned_chunks
+            "chunks": formatted_chunks
         }
 
         headers = {"Content-Type": "application/json"}
@@ -141,7 +189,7 @@ async def save_chunks(request: Request):
 
         return {
             "status": "success",
-            "message": f"총 {len(cleaned_chunks)}개의 텍스트 청크(순수 텍스트)가 설정된 웹훅({target_url})으로 성공적으로 전송되었습니다!",
+            "message": f"총 {len(formatted_chunks)}개의 청크가 웹훅({target_url})에 성공적으로 전송되었습니다!",
             "target_api_response_code": res.status_code
         }
 
