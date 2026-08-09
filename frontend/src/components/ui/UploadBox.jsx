@@ -45,7 +45,8 @@ const styles = {
     cursor: 'pointer',
     backgroundColor: isDragActive ? 'rgba(255,255,255,0.7)' : 'transparent',
     transition: 'background-color 0.2s ease-in-out',
-    userSelect: 'none'
+    userSelect: 'none',
+    WebkitUserDrag: 'none'
   }),
   logoWrapper: { 
     marginBottom: '16px', 
@@ -54,23 +55,31 @@ const styles = {
     alignItems: 'center',
     width: '210px',
     height: '210px',
-    overflow: 'hidden'
+    overflow: 'hidden',
+    pointerEvents: 'none',
+    perspective: '1000px' // 🐾 3D 미세 회전용 공간
   },
-  logoImg: (isDragActive) => ({
+  logoImg: (isDragActive, rotateY) => ({
     width: '100%',
     height: '100%',
     objectFit: 'contain',
+    transform: `rotateY(${rotateY}deg)`, // 🐾 이미지 교체 시 미세 3D 기울임 추가
+    transition: 'transform 0.15s ease-out, filter 0.2s ease-in-out',
     filter: isDragActive 
       ? 'drop-shadow(0 12px 24px rgba(59, 130, 246, 0.45)) scale(1.06)' 
       : 'drop-shadow(0 10px 20px rgba(0, 0, 0, 0.12))',
-    transition: 'filter 0.2s ease-in-out, transform 0.2s ease-in-out'
+    userSelect: 'none',
+    pointerEvents: 'none',
+    WebkitUserDrag: 'none'
   }),
   mainText: { 
     fontWeight: '800', 
     color: '#0f172a', 
     fontSize: '22px', 
     margin: '0 0 10px 0', 
-    letterSpacing: '-0.3px' 
+    letterSpacing: '-0.3px',
+    userSelect: 'none',
+    pointerEvents: 'none'
   },
   subBadge: { 
     color: '#2563eb', 
@@ -80,7 +89,9 @@ const styles = {
     backgroundColor: '#eff6ff', 
     padding: '6px 18px', 
     borderRadius: '20px', 
-    border: '1px solid #bfdbfe' 
+    border: '1px solid #bfdbfe',
+    userSelect: 'none',
+    pointerEvents: 'none'
   },
   alertBannerContainer: {
     width: '100%',
@@ -154,14 +165,16 @@ function UploadBox({
   const [isDragActive, setIsDragActive] = useState(false);
   const [hasTargetUrl, setHasTargetUrl] = useState(true);
   
-  // 🐾 현재 표출할 고양이 이미지 Index (기본값 1: 정면 catCenter)
+  // 🐾 현재 단일 이미지 Index (0: 좌, 1: 정면, 2: 우)
   const [currentFrameIndex, setCurrentFrameIndex] = useState(1);
+  // 🐾 미세 3D 기울임 각도 (-8deg ~ +8deg)
+  const [rotateY, setRotateY] = useState(0);
 
   const fileInputRef = useRef(null);
   const dragCounterRef = useRef(0);
   const contentRef = useRef(null);
 
-  // 🎯 이미지 프리로딩(Preload) 처리
+  // 🎯 이미지 프리로딩(Preload)
   useEffect(() => {
     catFrames.forEach((src) => {
       const img = new Image();
@@ -169,7 +182,7 @@ function UploadBox({
     });
   }, []);
 
-  // 🐾 화면 전체 마우스 추적 이벤트 바인딩
+  // 🐾 화면 전체 마우스 위치 계산 (인덱스 지정 + 미세 3D 회전)
   useEffect(() => {
     const handleGlobalMouseMove = (e) => {
       if (!contentRef.current) return;
@@ -177,19 +190,21 @@ function UploadBox({
       const rect = contentRef.current.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
 
-      // 화면 너비 절반을 기준으로 마우스의 X 위치 비율 계산 (-1.0 ~ 1.0)
+      // -1.0 ~ 1.0 비율 계산
       const xRatio = (e.clientX - centerX) / (window.innerWidth / 2);
+      const clampedRatio = Math.max(-1, Math.min(1, xRatio));
 
-      // 비율을 0 ~ 1 범위로 변환
-      const normalizedX = Math.max(0, Math.min(1, (xRatio + 1) / 2));
+      // 1. 단일 프레임 결정 (0, 1, 2 중 무조건 1개만 선택)
+      if (clampedRatio < -0.33) {
+        setCurrentFrameIndex(0); // 좌측 시선
+      } else if (clampedRatio > 0.33) {
+        setCurrentFrameIndex(2); // 우측 시선
+      } else {
+        setCurrentFrameIndex(1); // 정면 시선
+      }
 
-      // 0~2 인덱스로 매핑
-      const frameIdx = Math.min(
-        Math.floor(normalizedX * catFrames.length),
-        catFrames.length - 1
-      );
-
-      setCurrentFrameIndex(frameIdx);
+      // 2. 미세 3D 회전 각도 세팅 (최대 8도만 회전)
+      setRotateY(clampedRatio * 8);
     };
 
     window.addEventListener('mousemove', handleGlobalMouseMove);
@@ -227,34 +242,69 @@ function UploadBox({
     };
   }, []);
 
+  // 🛡️ 드래그 파일 검증 유틸리티
+  const isFileDragEvent = (e) => {
+    if (!e.dataTransfer || !e.dataTransfer.types) return false;
+    const types = Array.from(e.dataTransfer.types);
+    return types.includes('Files') && !types.includes('text/html');
+  };
+
   const handleDragEnter = (e) => {
     e.preventDefault();
+    if (!isFileDragEvent(e)) return;
+
     dragCounterRef.current += 1;
     if (dragCounterRef.current === 1) {
       setIsDragActive(true);
     }
   };
 
+  const handleDragOver = (e) => {
+    if (isFileDragEvent(e)) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    } else {
+      e.dataTransfer.dropEffect = 'none';
+    }
+  };
+
   const handleDragLeave = (e) => {
     e.preventDefault();
+    if (!isFileDragEvent(e)) return;
+
     dragCounterRef.current -= 1;
-    if (dragCounterRef.current === 0) {
+    if (dragCounterRef.current <= 0) {
+      dragCounterRef.current = 0;
       setIsDragActive(false);
     }
   };
 
   const handleDrop = (e) => {
     e.preventDefault();
+    e.stopPropagation();
     dragCounterRef.current = 0;
     setIsDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      onFileUpload(e.dataTransfer.files[0]);
+
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      const droppedFile = e.dataTransfer.files[0];
+      
+      if (
+        droppedFile && 
+        droppedFile instanceof File && 
+        droppedFile.size > 0 && 
+        typeof onFileUpload === 'function'
+      ) {
+        onFileUpload(droppedFile);
+      }
     }
   };
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
-      onFileUpload(e.target.files[0]);
+      const selectedFile = e.target.files[0];
+      if (selectedFile && selectedFile.size > 0 && typeof onFileUpload === 'function') {
+        onFileUpload(selectedFile);
+      }
       e.target.value = '';
     }
   };
@@ -283,7 +333,7 @@ function UploadBox({
         ...(isDragActive ? styles.dropZoneActive : {})
       }}
       onDragEnter={handleDragEnter}
-      onDragOver={(e) => e.preventDefault()}
+      onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
@@ -318,7 +368,7 @@ function UploadBox({
         </div>
       )}
       
-      {/* 🐾 중앙 클릭/드래그 타깃 (화면 전체 연동 인터랙션) */}
+      {/* 🐾 중앙 클릭/드래그 타깃 (단일 이미지 렌더링 + 미세 회전) */}
       <div 
         ref={contentRef}
         style={styles.clickableContent(isDragActive)}
@@ -328,7 +378,8 @@ function UploadBox({
           <img 
             src={catFrames[currentFrameIndex]} 
             alt="AI Meow Interactive Logo" 
-            style={styles.logoImg(isDragActive)}
+            draggable={false}
+            style={styles.logoImg(isDragActive, rotateY)}
           />
         </div>
 
