@@ -105,7 +105,7 @@ npm run dev
 docker build -t aimeow-web .
 
 # Docker 컨테이너 실행
-docker run -d -p 8000:8000 --name aimeow-web-container aimeow-web
+docker run -d -p 8100:8100 --name aimeow-web-container aimeow-web
 
 ```
 
