@@ -16,10 +16,8 @@ class Settings:
     TARGET_REST_API_KEY: str = os.getenv("TARGET_REST_API_KEY", "")
     IMAGE_UPLOAD_URL: str = os.getenv("IMAGE_UPLOAD_URL", "")
     IMAGE_SERVER_TOKEN: str = os.getenv("IMAGE_SERVER_TOKEN", "")
-    
-    # 📌 Poppler 실행 바이너리 경로 (Windows 개발 시 .env에서 설정, Linux/Docker 환경 시 빈값/None)
-    POPPLER_PATH: str = os.getenv("POPPLER_PATH", "")
-
+    FILE_FIELD_NAME: str = os.getenv("FILE_FIELD_NAME", "file")
+    RESPONSE_URL_KEY: str = os.getenv("RESPONSE_URL_KEY", "auto")
 
 settings = Settings()
 
@@ -31,7 +29,8 @@ def load_server_config() -> dict:
         "api_key": settings.TARGET_REST_API_KEY,
         "image_upload_url": settings.IMAGE_UPLOAD_URL,
         "image_server_token": settings.IMAGE_SERVER_TOKEN,
-        "poppler_path": settings.POPPLER_PATH
+        "file_field_name": settings.FILE_FIELD_NAME,
+        "response_url_key": settings.RESPONSE_URL_KEY,
     }
     
     if os.path.exists(CONFIG_FILE_PATH):
@@ -51,12 +50,13 @@ def save_server_config(data: dict):
         with open(CONFIG_FILE_PATH, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
             
-        # 메모리 설정 즉시 동기화
+        # 🎯 메모리 설정 즉시 동기화 (신규 필드 포함)
         settings.TARGET_REST_API_URL = data.get("target_api_url", "")
         settings.TARGET_REST_API_KEY = data.get("api_key", "")
         settings.IMAGE_UPLOAD_URL = data.get("image_upload_url", "")
         settings.IMAGE_SERVER_TOKEN = data.get("image_server_token", "")
-        settings.POPPLER_PATH = data.get("poppler_path", settings.POPPLER_PATH)
+        settings.FILE_FIELD_NAME = data.get("file_field_name", "file")
+        settings.RESPONSE_URL_KEY = data.get("response_url_key", "auto")
     except Exception as e:
         print(f"⚠️ server_config.json 저장 실패: {e}")
 
@@ -81,4 +81,5 @@ settings.TARGET_REST_API_URL = _initial_config.get("target_api_url", settings.TA
 settings.TARGET_REST_API_KEY = _initial_config.get("api_key", settings.TARGET_REST_API_KEY)
 settings.IMAGE_UPLOAD_URL = _initial_config.get("image_upload_url", settings.IMAGE_UPLOAD_URL)
 settings.IMAGE_SERVER_TOKEN = _initial_config.get("image_server_token", settings.IMAGE_SERVER_TOKEN)
-settings.POPPLER_PATH = _initial_config.get("poppler_path", settings.POPPLER_PATH)
+settings.FILE_FIELD_NAME = _initial_config.get("file_field_name", settings.FILE_FIELD_NAME)
+settings.RESPONSE_URL_KEY = _initial_config.get("response_url_key", settings.RESPONSE_URL_KEY)

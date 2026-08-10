@@ -23,7 +23,9 @@ export const fetchServerConfigApi = async () => {
       target_api_url: "", 
       api_key: "",
       image_upload_url: "",
-      image_server_token: ""
+      image_server_token: "",
+      file_field_name: "file",
+      response_url_key: "auto"
     };
   }
 };
@@ -146,12 +148,17 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
       target_api_url: targetApiUrlOrConfig.target_api_url || targetApiUrlOrConfig.targetApiUrl || '',
       api_key: targetApiUrlOrConfig.api_key || targetApiUrlOrConfig.apiKey || '',
       image_upload_url: targetApiUrlOrConfig.image_upload_url || targetApiUrlOrConfig.imageUploadUrl || '',
-      image_server_token: targetApiUrlOrConfig.image_server_token || targetApiUrlOrConfig.imageServerToken || ''
+      image_server_token: targetApiUrlOrConfig.image_server_token || targetApiUrlOrConfig.imageServerToken || '',
+      // 🎯 누락되었던 file_field_name, response_url_key 추가 반영
+      file_field_name: targetApiUrlOrConfig.file_field_name || targetApiUrlOrConfig.fileFieldName || 'file',
+      response_url_key: targetApiUrlOrConfig.response_url_key || targetApiUrlOrConfig.responseUrlKey || 'auto'
     };
   } else {
     payload = {
       target_api_url: targetApiUrlOrConfig || '',
-      api_key: apiKey || ''
+      api_key: apiKey || '',
+      file_field_name: 'file',
+      response_url_key: 'auto'
     };
   }
 

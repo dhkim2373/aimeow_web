@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import MainLayout from './components/layout/MainLayout';
 import ChunkingPage from './pages/ChunkingPage';
 import ImageChunkingPage from './pages/ImageChunkingPage';
+import TextInputChunkingPage from './pages/TextInputChunkingPage'; // 👈 1. 텍스트 직접 입력 페이지 임포트
 import HistoryPage from './pages/HistoryPage';
 import SettingsPage from './pages/SettingsPage';
 
@@ -23,6 +24,9 @@ function App() {
 
   const renderPage = () => {
     switch (currentMenu) {
+      case 'text_input_chunking': // 👈 2. 텍스트 직접 입력 청킹 메뉴 매핑
+      case 'text-input':
+        return <TextInputChunkingPage />;
       case 'chunking':
       case 'smart-chunk':
         return <ChunkingPage />;

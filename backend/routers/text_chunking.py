@@ -84,10 +84,11 @@ async def upload_pdf(
         print(f"❌ PDF 파싱 실패: {str(e)}")
         raise HTTPException(status_code=500, detail=f"PDF 파싱 실패: {str(e)}")
 
+
 @router.post("/save-chunks")
 async def save_chunks(request: Request):
     """
-    🎯 텍스트 청크 저장 및 웹훅 전송 (chunks 내부: page_no, text 2개 필드로 경량화)
+    🎯 텍스트 청크 저장 및 웹훅 전송 (PDF 파싱 및 텍스트 직접 입력 즉시 저장 공용 활용)
     """
     try:
         body = await request.json()
@@ -111,7 +112,7 @@ async def save_chunks(request: Request):
             is_deleted = item.get("is_deleted", False) if isinstance(item, dict) else getattr(item, "is_deleted", False)
             is_split_point = item.get("is_split_point", False) if isinstance(item, dict) else getattr(item, "is_split_point", False)
             
-            raw_page = item.get("page_number") if isinstance(item, dict) else getattr(item, "page_number", 1)
+            raw_page = item.get("page_number") or item.get("page_no") if isinstance(item, dict) else 1
             try:
                 page_number = int(raw_page)
             except (ValueError, TypeError):
@@ -147,7 +148,6 @@ async def save_chunks(request: Request):
                     else:
                         page_no_str = f"{chunk_page_start}~{chunk_page_end}"
 
-                    # 🎯 chunks 배열 내부에서는 source_filename 제거 (page_no, text 만 포함)
                     formatted_chunks.append({
                         "page_no": page_no_str,
                         "text": final_text

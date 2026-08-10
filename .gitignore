@@ -6,7 +6,6 @@ server_config.json
 # 가상환경 및 바이너리
 venv/
 .venv/
-poppler-*/
 
 # 업로드 및 빌드 결과물
 backend/uploads/

@@ -8,7 +8,7 @@ const styles = {
     borderRight: '1px solid #e2e8f0',
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: 'space-between', // 🐾 상단 메뉴와 하단 고지 영역을 양끝으로 분리
+    justifyContent: 'space-between', // 상단 메뉴와 하단 고지 영역을 양끝으로 분리
     padding: '20px 14px',
     boxSizing: 'border-box',
     flexShrink: 0
@@ -60,7 +60,7 @@ const styles = {
     color: active ? '#ffffff' : '#64748b',
     transition: 'all 0.2s ease'
   }),
-  // 🐾 하단 라이선스 및 GitHub 고지 스타일
+  // 하단 라이선스 및 GitHub 고지 스타일
   footerArea: {
     borderTop: '1px solid #f1f5f9',
     paddingTop: '16px',
@@ -110,7 +110,20 @@ function Sidebar(props) {
     <aside style={styles.sidebarContainer}>
       {/* 상단 메인 메뉴 영역 */}
       <div style={styles.menuList}>
-        {/* 1. 스마트 청킹 매니저 */}
+        {/* 1. 텍스트 직접 입력 청킹 (NEW) */}
+        <button
+          type="button"
+          style={styles.menuItem(activeMenu === 'text_input_chunking' || activeMenu === 'text-input')}
+          onClick={() => handleMenuClick('text_input_chunking')}
+        >
+          {(activeMenu === 'text_input_chunking' || activeMenu === 'text-input') && <div style={styles.activeIndicator} />}
+          <div style={styles.iconBadge(activeMenu === 'text_input_chunking' || activeMenu === 'text-input')}>
+            ✍️
+          </div>
+          <span style={{ letterSpacing: '-0.3px' }}>텍스트 직접 청킹</span>
+        </button>
+
+        {/* 2. 문서 텍스트 청킹 (기존 PDF 연동) */}
         <button
           type="button"
           style={styles.menuItem(activeMenu === 'chunking' || activeMenu === 'smart-chunk')}
@@ -123,7 +136,7 @@ function Sidebar(props) {
           <span style={{ letterSpacing: '-0.3px' }}>문서 텍스트 청킹</span>
         </button>
 
-        {/* 2. 이미지 청킹 매니저 */}
+        {/* 3. 문서 이미지 청킹 */}
         <button
           type="button"
           style={styles.menuItem(activeMenu === 'img_chunking' || activeMenu === 'image-chunk')}
@@ -136,7 +149,7 @@ function Sidebar(props) {
           <span style={{ letterSpacing: '-0.3px' }}>문서 이미지 청킹</span>
         </button>
 
-        {/* 3. RAG 연동 설정 */}
+        {/* 4. RAG 연동 설정 */}
         <button
           type="button"
           style={styles.menuItem(activeMenu === 'settings' || activeMenu === 'rag-settings')}
@@ -150,9 +163,9 @@ function Sidebar(props) {
         </button>
       </div>
 
-      {/* 🐾 사이드바 최하단: AGPL 3.0 라이선스 & GitHub 링크 고정 영역 */}
+      {/* 사이드바 최하단: AGPL 3.0 라이선스 & GitHub 링크 고정 영역 */}
       <div style={styles.footerArea}>
-        {/* 라이선스 표기 (PyMuPDF4LLM 기반 AGPL-3.0 적용) */}
+        {/* 라이선스 표기 */}
         <div style={styles.licenseBadge}>
           <span>License</span>
           <span style={{ color: '#0f172a', fontWeight: '800' }}>AGPL-3.0</span>

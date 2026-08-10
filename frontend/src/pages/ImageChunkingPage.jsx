@@ -29,13 +29,13 @@ const getImageUrl = (img) => {
   return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
-// 지식 DB 저장 및 서빙 URL 표시용 헬퍼
+// 지식 DB 저장 및 서빙 URL 표시용 헬퍼 (blob 주소가 전송되는 것을 원천 차단)
 const getHttpServerUrl = (img) => {
   if (!img) return '';
   const url = img.preview_url || img.image_server_url || img.url || img.image_url || '';
-  if (!url) return '';
+  if (!url || url.startsWith('blob:')) return '';
 
-  if (url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
+  if (url.startsWith('http://') || url.startsWith('https://')) {
     return url;
   }
 
@@ -103,7 +103,6 @@ const styles = {
     fontWeight: '600',
     outline: 'none'
   },
-  // 🎯 작업 초기화 버튼 스타일
   resetBtn: {
     backgroundColor: '#f1f5f9',
     color: '#475569',
@@ -261,7 +260,7 @@ function ImageChunkingPage() {
     };
   }, [isResizing]);
 
-  // 🎯 파일 업로드 핸들러
+  // 🎯 파일 업로드 핸들러 (Blob URL 생성 대신 백엔드 업로드 API 연동으로 서버 정적 URL 확보)
   const handleFileUpload = async (file) => {
     setStep('loading');
     setSourceFilename(file.name);
@@ -272,25 +271,22 @@ function ImageChunkingPage() {
       let extractedList = [];
 
       if (file.type.startsWith('image/')) {
-        try {
-          const apiRes = await uploadImageApi(file);
-          const rawUrl = apiRes.preview_url || apiRes.image_url || URL.createObjectURL(file);
-          extractedList = [{
-            image_id: apiRes.image_id || 'img_single_1',
-            page_number: 1,
-            preview_url: rawUrl,
-            ocr_text: apiRes.ocr_text || ''
-          }];
-        } catch (imgErr) {
-          console.warn("단일 이미지 백엔드 업로드 예외 발생, 로컬 객체 생성으로 대체:", imgErr);
-          const objectUrl = URL.createObjectURL(file);
-          extractedList = [{
-            image_id: 'img_single_1',
-            page_number: 1,
-            preview_url: objectUrl
-          }];
+        // 단일 이미지 파일인 경우 백엔드 API로 업로드하여 서버 정적 URL 획득
+        const apiRes = await uploadImageApi(file);
+        const serverUrl = apiRes.preview_url || apiRes.image_url || apiRes.url;
+        
+        if (!serverUrl) {
+          throw new Error("서버로부터 유효한 이미지 서빙 URL을 받지 못했습니다.");
         }
+
+        extractedList = [{
+          image_id: apiRes.image_id || 'img_single_1',
+          page_number: 1,
+          preview_url: serverUrl,
+          ocr_text: apiRes.ocr_text || ''
+        }];
       } else {
+        // PDF 문서 파일인 경우 페이지별 이미지 추출 API 호출
         const responseData = await extractPdfImagesApi(file);
 
         if (Array.isArray(responseData)) {
@@ -343,6 +339,11 @@ function ImageChunkingPage() {
 
   const handleSaveImageChunk = async () => {
     if (!selectedImage) return;
+
+    if (!imageServerUrl || imageServerUrl.startsWith('blob:')) {
+      alert("⚠️ 유효한 서버 이미지 URL이 아닙니다. 이미지가 정상적으로 업로드되었는지 확인해주세요.");
+      return;
+    }
 
     try {
       const payload = {
