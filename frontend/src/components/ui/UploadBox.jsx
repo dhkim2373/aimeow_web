@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import defaultCatVideo from '../../assets/cat_play.mp4';
+import defaultCatVideo from '../../assets/cat_snapshot.mp4';
 import { fetchServerConfigApi } from '../../api/chunkingApi';
 
 const styles = {
