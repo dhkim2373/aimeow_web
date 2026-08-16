@@ -61,8 +61,8 @@ def upload_to_external_image_server(
         # 1. URL 내 템플릿 변수({key}, {api_key}, {token}) 치환
         if clean_token:
             target_url = target_url.replace("{key}", clean_token)\
-                                   .replace("{api_key}", clean_token)\
-                                   .replace("{token}", clean_token)
+                                     .replace("{api_key}", clean_token)\
+                                     .replace("{token}", clean_token)
             
             if "{key}" not in upload_api_url and "{api_key}" not in upload_api_url:
                 headers["Authorization"] = f"Bearer {clean_token}"
@@ -102,6 +102,50 @@ def upload_to_external_image_server(
         return None
 
 
+@router.post("/upload-image")
+async def upload_single_image(
+    request: Request,
+    file: UploadFile = File(...),
+    user_id: Optional[str] = Form("default_user")
+):
+    """
+    🎯 단일 이미지 파일 업로드 처리 및 서버 정적 서빙 URL 반환 (프론트엔드 연동)
+    """
+    filename = file.filename.lower()
+    file_bytes = await file.read()
+    
+    base_url = str(request.base_url).rstrip('/')
+    user_img_dir = get_user_workspace(user_id=user_id, subfolder="images")
+
+    try:
+        if not filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            raise HTTPException(status_code=400, detail="지원하지 않는 이미지 형식입니다.")
+
+        image_id = f"img_{uuid.uuid4().hex[:8]}"
+        ext = filename.split('.')[-1]
+        save_filename = f"{image_id}.{ext}"
+        save_path = os.path.join(user_img_dir, save_filename)
+
+        with open(save_path, "wb") as f:
+            f.write(file_bytes)
+
+        full_static_url = f"{base_url}/static/{user_id}/images/{save_filename}"
+        base64_data = base64.b64encode(file_bytes).decode('utf-8')
+
+        return {
+            "status": "success",
+            "image_id": image_id,
+            "preview_url": full_static_url,
+            "image_url": full_static_url,
+            "image_data_base64": f"data:image/{ext};base64,{base64_data}"
+        }
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"❌ 단일 이미지 업로드 실패 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"이미지 업로드 실패: {str(e)}")
+
+
 @router.post("/extract-images")
 async def extract_images(
     request: Request,
@@ -109,7 +153,7 @@ async def extract_images(
     user_id: Optional[str] = Form("default_user")
 ):
     """
-    PDF 또는 이미지 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 추출
+    PDF 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 고속 추출
     🎯 (Poppler/pdf2image 의존성 없이 PyMuPDF로 고속 추출)
     """
     filename = file.filename.lower()
@@ -120,57 +164,38 @@ async def extract_images(
     extracted_images = []
 
     try:
-        # 1. 단일 이미지 파일 처리 (PNG, JPG, WEBP 등)
-        if filename.endswith(('.png', '.jpg', '.jpeg', '.webp')):
-            image_id = f"img_{uuid.uuid4().hex[:8]}"
-            ext = filename.split('.')[-1]
-            save_filename = f"{image_id}.{ext}"
+        if not filename.endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="PDF 파일 형식이 아닙니다.")
+
+        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+
+        for page_idx in range(len(pdf_doc)):
+            page_num = page_idx + 1
+            page = pdf_doc[page_idx]
+
+            zoom = 150 / 72
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+
+            image_id = f"img_p{page_num}_{uuid.uuid4().hex[:4]}"
+            save_filename = f"{image_id}.png"
             save_path = os.path.join(user_img_dir, save_filename)
 
-            with open(save_path, "wb") as f:
-                f.write(file_bytes)
+            pix.save(save_path)
+
+            img_bytes = pix.tobytes("png")
+            base64_data = base64.b64encode(img_bytes).decode('utf-8')
 
             full_static_url = f"{base_url}/static/{user_id}/images/{save_filename}"
-            base64_data = base64.b64encode(file_bytes).decode('utf-8')
 
             extracted_images.append({
                 "image_id": image_id,
-                "page_number": 1,
+                "page_number": page_num,
                 "preview_url": full_static_url,
-                "image_data_base64": f"data:image/{ext};base64,{base64_data}"
+                "image_data_base64": f"data:image/png;base64,{base64_data}"
             })
 
-        # 2. PDF 문서 파일 처리 (PyMuPDF / fitz 기반 고속 이미지 렌더링)
-        elif filename.endswith('.pdf'):
-            pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
-
-            for page_idx in range(len(pdf_doc)):
-                page_num = page_idx + 1
-                page = pdf_doc[page_idx]
-
-                zoom = 150 / 72
-                mat = fitz.Matrix(zoom, zoom)
-                pix = page.get_pixmap(matrix=mat, alpha=False)
-
-                image_id = f"img_p{page_num}_{uuid.uuid4().hex[:4]}"
-                save_filename = f"{image_id}.png"
-                save_path = os.path.join(user_img_dir, save_filename)
-
-                pix.save(save_path)
-
-                img_bytes = pix.tobytes("png")
-                base64_data = base64.b64encode(img_bytes).decode('utf-8')
-
-                full_static_url = f"{base_url}/static/{user_id}/images/{save_filename}"
-
-                extracted_images.append({
-                    "image_id": image_id,
-                    "page_number": page_num,
-                    "preview_url": full_static_url,
-                    "image_data_base64": f"data:image/png;base64,{base64_data}"
-                })
-
-            pdf_doc.close()
+        pdf_doc.close()
 
         return {
             "status": "success",
@@ -178,6 +203,8 @@ async def extract_images(
             "total": len(extracted_images),
             "images": extracted_images
         }
+    except HTTPException as he:
+        raise he
     except Exception as e:
         print(f"❌ 이미지 추출 실패 오류: {str(e)}")
         raise HTTPException(status_code=500, detail=f"이미지 추출 실패: {str(e)}")
