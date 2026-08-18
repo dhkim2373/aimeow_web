@@ -55,7 +55,7 @@ const styles = {
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '12px',
+    gap: '10px',
     overflowY: 'auto',
     boxSizing: 'border-box'
   },
@@ -87,7 +87,7 @@ const styles = {
   textarea: {
     width: '100%',
     flex: 1,
-    minHeight: '260px',
+    minHeight: '220px', // 🚀 세로 공간 대폭 확장
     padding: '12px',
     borderRadius: '8px',
     border: '1px solid #cbd5e1',
@@ -108,6 +108,22 @@ const styles = {
     width: '100%',
     boxSizing: 'border-box',
     backgroundColor: '#ffffff'
+  },
+  selectInput: {
+    padding: '8px 12px',
+    borderRadius: '8px',
+    border: '1px solid #cbd5e1',
+    fontSize: '13px',
+    outline: 'none',
+    width: '100%',
+    boxSizing: 'border-box',
+    backgroundColor: '#ffffff',
+    fontWeight: '600',
+    color: '#1e293b'
+  },
+  rowGroup: {
+    display: 'flex',
+    gap: '10px'
   },
   previewList: {
     flex: 1,
@@ -149,7 +165,11 @@ const styles = {
 function TextInputChunkingPage() {
   const [docTitle, setDocTitle] = useState('직접_입력_문서');
   const [globalPrefix, setGlobalPrefix] = useState('');
+  const [chunkMode, setChunkMode] = useState('and'); 
   const [delimiter, setDelimiter] = useState('\\n\\n\\n'); 
+  const [chunkSize, setChunkSize] = useState(500);
+  const [chunkOverlap, setChunkOverlap] = useState(50);
+
   const [isProcessing, setIsProcessing] = useState(false);
   const [previewChunks, setPreviewChunks] = useState([]);
 
@@ -159,26 +179,68 @@ function TextInputChunkingPage() {
     return rawDelim.replace(/\\n/g, '\n').replace(/\\t/g, '\t');
   };
 
+  const processChunkingLogic = (rawText) => {
+    if (!rawText.trim()) return [];
+
+    const actualDelimiter = parseDelimiter(delimiter);
+    const size = parseInt(chunkSize, 10) || 500;
+    const overlap = parseInt(chunkOverlap, 10) || 0;
+
+    if (chunkMode === 'delimiter_only') {
+      const rawChunks = actualDelimiter ? rawText.split(actualDelimiter) : [rawText];
+      return rawChunks.map(c => c.trim()).filter(c => c.length > 0);
+    }
+
+    if (chunkMode === 'size_only') {
+      const refinedChunks = [];
+      let start = 0;
+      while (start < rawText.length) {
+        const end = start + size;
+        const subChunk = rawText.substring(start, end).trim();
+        if (subChunk) refinedChunks.push(subChunk);
+        if (size <= overlap) break;
+        start += (size - overlap);
+      }
+      return refinedChunks;
+    }
+
+    const rawChunks = actualDelimiter ? rawText.split(actualDelimiter) : [rawText];
+    const finalChunks = [];
+
+    rawChunks.forEach(chunk => {
+      const trimmedChunk = chunk.trim();
+      if (!trimmedChunk) return;
+
+      if (trimmedChunk.length <= size) {
+        finalChunks.push(trimmedChunk);
+      } else {
+        let start = 0;
+        while (start < trimmedChunk.length) {
+          const end = start + size;
+          const subChunk = trimmedChunk.substring(start, end).trim();
+          if (subChunk) finalChunks.push(subChunk);
+          if (size <= overlap) break;
+          start += (size - overlap);
+        }
+      }
+    });
+
+    return finalChunks;
+  };
+
   const handleTextChange = () => {
     const rawText = textRef.current?.value || '';
     if (!rawText.trim()) {
       setPreviewChunks([]);
       return;
     }
-
-    const actualDelimiter = parseDelimiter(delimiter);
-    const rawChunks = actualDelimiter ? rawText.split(actualDelimiter) : [rawText];
-    
-    const formatted = rawChunks
-      .map(chunk => chunk.trim())
-      .filter(chunk => chunk.length > 0);
-
+    const formatted = processChunkingLogic(rawText);
     setPreviewChunks(formatted);
   };
 
   useEffect(() => {
     handleTextChange();
-  }, [delimiter]);
+  }, [chunkMode, delimiter, chunkSize, chunkOverlap]);
 
   const handleImmediateSave = async () => {
     const rawText = textRef.current?.value;
@@ -190,19 +252,14 @@ function TextInputChunkingPage() {
     setIsProcessing(true);
 
     try {
-      const actualDelimiter = parseDelimiter(delimiter);
-      const rawChunks = actualDelimiter ? rawText.split(actualDelimiter) : [rawText];
-
-      const formattedChunks = rawChunks
-        .map(chunk => chunk.trim())
-        .filter(chunk => chunk.length > 0)
-        .map((chunk) => ({
-          page_no: "1",
-          page_number: 1,
-          text: chunk,
-          is_deleted: false,
-          is_split_point: true
-        }));
+      const formatted = processChunkingLogic(rawText);
+      const formattedChunks = formatted.map((chunk) => ({
+        page_no: "1",
+        page_number: 1,
+        text: chunk,
+        is_deleted: false,
+        is_split_point: true
+      }));
 
       if (formattedChunks.length === 0) {
         alert('분할된 유효한 청크가 없습니다.');
@@ -215,7 +272,6 @@ function TextInputChunkingPage() {
         return;
       }
 
-      // 🎯 백엔드 URL 동적 설정 (단일 포트 혹은 8100 포트 자동 분기)
       const API_BASE_URL = window.location.port === '5173' ? `http://${window.location.hostname}:8100` : '';
       const targetApiUrl = localStorage.getItem('aimeow_target_api_url') || '';
       const apiKey = localStorage.getItem('aimeow_api_key') || '';
@@ -261,7 +317,7 @@ function TextInputChunkingPage() {
         <div style={styles.headerSection}>
           <h2 style={styles.pageTitle}>✍️ 텍스트 직접 입력 및 실시간 청크 분할 매니저</h2>
           <p style={styles.pageDesc}>
-            좌측에 텍스트를 입력하고, 우측 실시간 미리보기 패널을 통해 분할 상태를 확인한 뒤 지식 DB에 적재하세요.
+            좌측에 텍스트를 입력하고, 구분자 및 사이즈 조건을 조합하여 우측 실시간 미리보기에서 확인 후 적재하세요.
           </p>
         </div>
 
@@ -270,46 +326,93 @@ function TextInputChunkingPage() {
           
           {/* [좌측 패널]: 입력 및 설정 영역 */}
           <div style={styles.leftPanel}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={styles.label}>문서 제목 (Source Filename)</label>
-              <input
-                type="text"
-                value={docTitle}
-                onChange={(e) => setDocTitle(e.target.value)}
-                style={styles.textInput}
-                placeholder="예: manual_note"
-              />
+            
+            {/* 🎯 문서 제목과 공통 헤더 Prefix를 한 줄(Row)로 병합 */}
+            <div style={styles.rowGroup}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                <label style={styles.label}>문서 제목 (Filename)</label>
+                <input
+                  type="text"
+                  value={docTitle}
+                  onChange={(e) => setDocTitle(e.target.value)}
+                  style={styles.textInput}
+                  placeholder="예: manual_note"
+                />
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                <label style={styles.label}>공통 헤더 Prefix (선택)</label>
+                <input
+                  type="text"
+                  value={globalPrefix}
+                  onChange={(e) => {
+                    setGlobalPrefix(e.target.value);
+                    handleTextChange();
+                  }}
+                  style={styles.textInput}
+                  placeholder="예: 의약품_정보"
+                />
+              </div>
             </div>
 
+            {/* 청크 분할 방식 선택 */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={styles.label}>공통 헤더 Prefix (선택 사항)</label>
-              <input
-                type="text"
-                value={globalPrefix}
-                onChange={(e) => {
-                  setGlobalPrefix(e.target.value);
-                  handleTextChange();
-                }}
-                style={styles.textInput}
-                placeholder="예: 의약품_타이레놀_정보"
-              />
+              <label style={styles.label}>⚙️ 청크 분할 방식 (Mode)</label>
+              <select
+                value={chunkMode}
+                onChange={(e) => setChunkMode(e.target.value)}
+                style={styles.selectInput}
+              >
+                <option value="and">🔗 하이브리드 (구분자 1차 + 사이즈/오버랩 2차)</option>
+                <option value="delimiter_only">✂️ 구분자만 사용 (Delimiter Only)</option>
+                <option value="size_only">📏 사이즈 & 오버랩만 사용 (Size Only)</option>
+              </select>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <label style={styles.label}>✂️ 청크 분할 구분자 (Delimiter)</label>
-              <input
-                type="text"
-                value={delimiter}
-                onChange={(e) => setDelimiter(e.target.value)}
-                style={{ ...styles.textInput, fontFamily: 'monospace' }}
-                placeholder="예: \n\n\n 또는 -----"
-              />
-              <span style={styles.subText}>
-                줄바꿈 3번은 <code>\n\n\n</code> 입력
-              </span>
-            </div>
+            {/* 구분자 입력 */}
+            {chunkMode !== 'size_only' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <label style={styles.label}>✂️ 청크 분할 구분자 (Delimiter)</label>
+                <input
+                  type="text"
+                  value={delimiter}
+                  onChange={(e) => setDelimiter(e.target.value)}
+                  style={{ ...styles.textInput, fontFamily: 'monospace' }}
+                  placeholder="예: \n\n\n 또는 -----"
+                />
+                <span style={styles.subText}>
+                  줄바꿈 3번은 <code>\n\n\n</code> 입력
+                </span>
+              </div>
+            )}
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: '200px' }}>
+            {/* 사이즈 및 오버랩 입력 */}
+            {chunkMode !== 'delimiter_only' && (
+              <div style={styles.rowGroup}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                  <label style={styles.label}>청크 최대 사이즈</label>
+                  <input
+                    type="number"
+                    value={chunkSize}
+                    onChange={(e) => setChunkSize(e.target.value)}
+                    style={styles.textInput}
+                    placeholder="500"
+                  />
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1 }}>
+                  <label style={styles.label}>여분 (Overlap)</label>
+                  <input
+                    type="number"
+                    value={chunkOverlap}
+                    onChange={(e) => setChunkOverlap(e.target.value)}
+                    style={styles.textInput}
+                    placeholder="50"
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* 🚀 세로 공간이 확장된 텍스트 입력 영역 */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flex: 1, minHeight: '220px' }}>
               <label style={styles.label}>저장할 내용 (붙여넣기 영역)</label>
               <textarea
                 ref={textRef}
