@@ -107,6 +107,9 @@ docker build -t aimeow-web .
 # Docker 컨테이너 실행
 docker run -d -p 8100:8100 --name aimeow-web-container aimeow-web
 
+# DockerHub 컨테이너 실행
+docker run -d --name aimeow-rag -p 8100:8100 --restart unless-stopped redbombz/aimeow-rag-center:1.0.0
+
 ```
 
 ---
