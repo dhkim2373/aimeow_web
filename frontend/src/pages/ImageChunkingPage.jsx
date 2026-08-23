@@ -4,7 +4,7 @@ import LoadingView from '../components/ui/LoadingView';
 import { extractPdfImagesApi, uploadImageApi, saveImageChunkApi } from '../api/chunkingApi';
 
 const imageGuideSteps = [
-  { num: '01', title: '📁 파일 업로드', desc: 'PDF 또는 이미지 드래그' },
+  { num: '01', title: '📁 파일/클립보드 업로드', desc: 'PDF, 이미지 드래그 또는 Ctrl+V' },
   { num: '02', title: '🖼️ 이미지 선택', desc: '페이지별 렌더링 이미지 선택' },
   { num: '03', title: '✍️ 메타데이터 작성', desc: '수동 텍스트/표/캡션 입력' },
   { num: '04', title: '💾 지식 DB 저장', desc: 'URL + 정보 최종 적재' }
@@ -237,6 +237,33 @@ function ImageChunkingPage() {
     setIsResizing(true);
   };
 
+  // 📋 [신규 기능] 전역 클립보드 붙여넣기(Ctrl + V) 감지 핸들러
+  useEffect(() => {
+    const handleGlobalPaste = async (e) => {
+      // 업로드 대기 상태일 때만 붙여넣기 허용
+      if (step !== 'upload') return;
+
+      const items = e.clipboardData?.items;
+      if (!items) return;
+
+      for (let i = 0; i < items.length; i++) {
+        if (items[i].type.indexOf('image') !== -1) {
+          const blob = items[i].getAsFile();
+          if (blob) {
+            const pastedFile = new File([blob], `pasted_capture_${Date.now()}.png`, { type: blob.type });
+            await handleFileUpload(pastedFile);
+            break;
+          }
+        }
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => {
+      window.removeEventListener('paste', handleGlobalPaste);
+    };
+  }, [step]);
+
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing || !wrapperRef.current) return;
@@ -260,7 +287,7 @@ function ImageChunkingPage() {
     };
   }, [isResizing]);
 
-  // 🎯 파일 업로드 핸들러 (Blob URL 생성 대신 백엔드 업로드 API 연동으로 서버 정적 URL 확보)
+  // 🎯 파일 업로드 핸들러 (PDF 또는 이미지/클립보드 공통)
   const handleFileUpload = async (file) => {
     setStep('loading');
     setSourceFilename(file.name);
@@ -271,7 +298,6 @@ function ImageChunkingPage() {
       let extractedList = [];
 
       if (file.type.startsWith('image/')) {
-        // 단일 이미지 파일인 경우 백엔드 API로 업로드하여 서버 정적 URL 획득
         const apiRes = await uploadImageApi(file);
         const serverUrl = apiRes.preview_url || apiRes.image_url || apiRes.url;
         
@@ -280,13 +306,12 @@ function ImageChunkingPage() {
         }
 
         extractedList = [{
-          image_id: apiRes.image_id || 'img_single_1',
+          image_id: apiRes.image_id || `img_clipboard_${Date.now()}`,
           page_number: 1,
           preview_url: serverUrl,
           ocr_text: apiRes.ocr_text || ''
         }];
       } else {
-        // PDF 문서 파일인 경우 페이지별 이미지 추출 API 호출
         const responseData = await extractPdfImagesApi(file);
 
         if (Array.isArray(responseData)) {
@@ -305,7 +330,7 @@ function ImageChunkingPage() {
         handleSelectImage(extractedList[0]);
       }
     } catch (err) {
-      console.error("이미지 추출 실패:", err);
+      console.error("이미지 처리 실패:", err);
       alert(err.message || "파일에서 이미지를 처리하는 중 오류가 발생했습니다.");
       setStep('upload');
     }
@@ -372,7 +397,7 @@ function ImageChunkingPage() {
           <UploadBox 
             onFileUpload={handleFileUpload} 
             showGuide={true}
-            guideTitle="수동 메타데이터 & 이미지 청킹 프로세스"
+            guideTitle="수동 메타데이터 & 이미지 청킹 프로세스 (클립보드 지원)"
             guideBadge="Image-to-RAG Pipeline"
             guideSteps={imageGuideSteps}
           />
