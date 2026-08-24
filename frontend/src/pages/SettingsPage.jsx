@@ -179,13 +179,16 @@ function SettingsPage() {
   const [targetApiUrl, setTargetApiUrl] = useState('');
   const [apiKey, setApiKey] = useState('');
 
-  // 2. 외부 이미지 서버 연동 설정 상태
+  // 2. ✨ Gemini AI 모델 설정 상태 추가
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+
+  // 3. 외부 이미지 서버 연동 설정 상태
   const [imageUploadUrl, setImageUploadUrl] = useState('');
   const [imageServerToken, setImageServerToken] = useState('');
   const [fileFieldName, setFileFieldName] = useState('file');
-  const [responseUrlKey, setResponseUrlKey] = useState('auto'); // 🎯 응답 JSON URL 키 경로 기본값 'auto'
+  const [responseUrlKey, setResponseUrlKey] = useState('auto');
 
-  // 3. UI 및 복사 관련 피드백 상태
+  // 4. UI 및 복사 관련 피드백 상태
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -213,6 +216,7 @@ function SettingsPage() {
         if (data) {
           setTargetApiUrl(data.target_api_url || '');
           setApiKey(data.api_key || '');
+          setGeminiApiKey(data.gemini_api_key || ''); // ✨ Gemini Key 로드
           setImageUploadUrl(data.image_upload_url || '');
           setImageServerToken(data.image_server_token || '');
           setFileFieldName(data.file_field_name || 'file');
@@ -231,12 +235,13 @@ function SettingsPage() {
       await saveServerConfigApi({
         target_api_url: targetApiUrl.trim(),
         api_key: apiKey.trim(),
+        gemini_api_key: geminiApiKey.trim(), // ✨ Gemini Key 저장 전송
         image_upload_url: imageUploadUrl.trim(),
         image_server_token: imageServerToken.trim(),
         file_field_name: fileFieldName.trim() || 'file',
         response_url_key: responseUrlKey.trim() || 'auto'
       });
-      alert("🐾 RAG 연동 및 이미지 서버 설정이 성공적으로 저장되었습니다!");
+      alert("🐾 RAG 연동, Gemini API 및 이미지 서버 설정이 성공적으로 저장되었습니다!");
     } catch (err) {
       console.error("설정 저장 오류:", err);
       alert(`⚠️ 서버 설정 저장 실패: ${err.message || '알 수 없는 오류'}`);
@@ -364,7 +369,29 @@ function SettingsPage() {
 
         <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '24px 0' }} />
 
-        {/* SECTION 2: 외부/운영 이미지 서버 연동 */}
+        {/* ✨ SECTION 2: AI & Vision 모델 연동 설정 (신규 추가) */}
+        <h3 style={styles.sectionTitle}>
+          ✨ Google Gemini Vision AI 연동 설정
+        </h3>
+
+        <div>
+          <label style={styles.label}>🤖 Google Gemini API Key</label>
+          <div style={styles.subText}>
+            이미지 청킹 화면에서 <strong style={{ color: '#2563eb' }}>AI 자동 정제 / Vision 메타데이터 추출</strong> 버튼 클릭 시 사용할 Google AI Studio API 키입니다.
+          </div>
+          <input 
+            type="password" 
+            placeholder="AIzaSy..." 
+            value={geminiApiKey}
+            onChange={(e) => setGeminiApiKey(e.target.value)}
+            style={styles.input}
+            autoComplete="new-password"
+          />
+        </div>
+
+        <div style={{ height: '1px', backgroundColor: '#e2e8f0', margin: '24px 0' }} />
+
+        {/* SECTION 3: 외부/운영 이미지 서버 연동 */}
         <h3 style={styles.sectionTitle}>
           🖼️ 외부/운영 이미지 서버 연동 (선택 사항)
         </h3>
@@ -431,7 +458,7 @@ function SettingsPage() {
         </div>
 
         <button 
-          type="button"
+          type="button" 
           style={{ ...styles.saveBtn, opacity: saving ? 0.7 : 1, cursor: saving ? 'not-allowed' : 'pointer' }} 
           onClick={handleSave}
           disabled={saving}

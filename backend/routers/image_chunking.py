@@ -1,14 +1,18 @@
 import os
 import io
 import uuid
+import json
 import base64
 import re
 import requests
 import asyncio
-import fitz  # 🐾 PyMuPDF (PyMuPDF4LLM 기반 고속 처리)
+import pymupdf  # ✅ 최신 표준 import
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
+from pydantic import BaseModel
 from PIL import Image
+from google import genai
+from google.genai import types
 
 from config import get_user_workspace, settings
 from routers.settings import get_config  # RAG 연동 설정 조회
@@ -49,9 +53,6 @@ def upload_to_external_image_server(
 ) -> Optional[str]:
     """
     등록된 외부/운영 이미지 서버로 파일을 업로드하고 영구 URL 수신
-    - URL 내 {key} / {api_key} 템플릿 자동 치환
-    - Form Data 파일 키 동적 지원 (file, image 등)
-    - 지정된 응답 JSON 키 경로(data.url 등) 동적 파싱 지원
     """
     try:
         headers = {}
@@ -61,8 +62,8 @@ def upload_to_external_image_server(
         # 1. URL 내 템플릿 변수({key}, {api_key}, {token}) 치환
         if clean_token:
             target_url = target_url.replace("{key}", clean_token)\
-                                     .replace("{api_key}", clean_token)\
-                                     .replace("{token}", clean_token)
+                                   .replace("{api_key}", clean_token)\
+                                   .replace("{token}", clean_token)
             
             if "{key}" not in upload_api_url and "{api_key}" not in upload_api_url:
                 headers["Authorization"] = f"Bearer {clean_token}"
@@ -102,15 +103,110 @@ def upload_to_external_image_server(
         return None
 
 
+# ─────────────────────────────────────────────────────────────
+# 🐾 Gemini Vision 자동 추출 스키마 및 엔드포인트
+# ─────────────────────────────────────────────────────────────
+
+class VisionExtractRequest(BaseModel):
+    image_url: str
+    user_id: Optional[str] = "default_user"
+    gemini_api_key: Optional[str] = None  # 옵션: 프론트 설정값 또는 환경변수
+
+
+@router.post("/extract-vision")
+async def extract_vision_metadata(req: VisionExtractRequest):
+    """
+    ✨ Gemini Vision을 호출하여 이미지의 텍스트, 구조, 표, 캡션, 태그를 자동 추출
+    """
+    try:
+        # 1. 대상 이미지 파일 로컬 경로 찾기
+        filename_part = req.image_url.split("/")[-1].split("?")[0]
+        user_img_dir = get_user_workspace(user_id=req.user_id, subfolder="images")
+        local_image_path = os.path.join(user_img_dir, filename_part)
+
+        if not os.path.exists(local_image_path):
+            raise HTTPException(status_code=404, detail=f"서버에서 로컬 이미지 파일을 찾을 수 없습니다: {filename_part}")
+
+        # 2. 이미지 바이트 및 확장자 판별
+        with open(local_image_path, "rb") as f:
+            image_bytes = f.read()
+
+        ext = filename_part.split(".")[-1].lower()
+        mime_type = "image/png" if ext == "png" else "image/jpeg" if ext in ["jpg", "jpeg"] else "image/webp"
+
+        # 3. Gemini Client 설정 (요청 본문 키 or 환경변수 or 설정 파일)
+        saved_config = get_config()
+        api_key = req.gemini_api_key or saved_config.get("gemini_api_key") or os.getenv("GEMINI_API_KEY")
+        
+        if not api_key:
+            raise HTTPException(status_code=400, detail="Gemini API Key가 설정되지 않았습니다. Target API 설정 또는 환경변수를 확인해 주세요.")
+
+        client = genai.Client(api_key=api_key)
+
+        # 4. 구조화 추출용 시스템 프롬프트
+        prompt = """
+        당신은 엔터프라이즈 RAG 시스템의 문서 이미지 전처리 전문가입니다.
+        제공된 이미지를 분석하여 검색 및 지식 DB에 저장하기 위한 최적의 메타데이터를 작성해 주세요.
+
+        반드시 아래의 JSON 구조로만 응답해야 합니다:
+        {
+          "manual_text": "이미지 내부의 모든 텍스트, 메뉴 계층 구조, 표(Markdown 테이블 형식), 핵심 내용을 충실하게 복원한 본문",
+          "caption": "이미지의 목적이나 핵심 주제를 명확하게 나타내는 1줄 요약 제목 (예: 아웃룩 폴더 트리 구조)",
+          "image_type": "표 / 양식 | 다이어그램 / 구조도 | UI / 화면캡처 | 차트 / 그래프 | 일반 이미지 중 택1",
+          "tags": "검색에 유용한 핵심 키워드 3~5개를 쉼표로 구분 (예: 메일함, 보관, 편지함, 아웃룩)"
+        }
+        """
+
+        # 5. Gemini 2.5 Flash 호출 (비동기 스레드 실행)
+        def call_gemini():
+            return client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=mime_type),
+                    prompt
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    temperature=0.2
+                )
+            )
+
+        response = await asyncio.to_thread(call_gemini)
+        
+        # 6. JSON 응답 파싱
+        raw_text = response.text.strip()
+        parsed_result = json.loads(raw_text)
+
+        return {
+            "status": "success",
+            "data": {
+                "manual_text": parsed_result.get("manual_text", ""),
+                "caption": parsed_result.get("caption", ""),
+                "image_type": parsed_result.get("image_type", "UI / 화면캡처"),
+                "tags": parsed_result.get("tags", "")
+            }
+        }
+
+    except HTTPException as he:
+        raise he
+    except json.JSONDecodeError:
+        print(f"❌ Gemini 응답 JSON 파싱 실패: {response.text}")
+        raise HTTPException(status_code=500, detail="Gemini 응답을 JSON으로 파싱하지 못했습니다.")
+    except Exception as e:
+        print(f"❌ Gemini Vision 호출 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Vision 추출 실패: {str(e)}")
+
+
+# ─────────────────────────────────────────────────────────────
+# 기존 업로드 / 추출 / 청크 저장 엔드포인트 유지
+# ─────────────────────────────────────────────────────────────
+
 @router.post("/upload-image")
 async def upload_single_image(
     request: Request,
     file: UploadFile = File(...),
     user_id: Optional[str] = Form("default_user")
 ):
-    """
-    🎯 단일 이미지 파일 업로드 처리 및 서버 정적 서빙 URL 반환 (프론트엔드 연동)
-    """
     filename = file.filename.lower()
     file_bytes = await file.read()
     
@@ -152,10 +248,6 @@ async def extract_images(
     file: UploadFile = File(...),
     user_id: Optional[str] = Form("default_user")
 ):
-    """
-    PDF 파일에서 뷰어용 이미지(동적 Host URL 및 Base64) 고속 추출
-    🎯 (Poppler/pdf2image 의존성 없이 PyMuPDF로 고속 추출)
-    """
     filename = file.filename.lower()
     file_bytes = await file.read()
     
@@ -167,14 +259,14 @@ async def extract_images(
         if not filename.endswith('.pdf'):
             raise HTTPException(status_code=400, detail="PDF 파일 형식이 아닙니다.")
 
-        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+        pdf_doc = pymupdf.open(stream=file_bytes, filetype="pdf")
 
         for page_idx in range(len(pdf_doc)):
             page_num = page_idx + 1
             page = pdf_doc[page_idx]
 
             zoom = 150 / 72
-            mat = fitz.Matrix(zoom, zoom)
+            mat = pymupdf.Matrix(zoom, zoom)
             pix = page.get_pixmap(matrix=mat, alpha=False)
 
             image_id = f"img_p{page_num}_{uuid.uuid4().hex[:4]}"
@@ -212,15 +304,10 @@ async def extract_images(
 
 @router.post("/save-image-chunk")
 async def save_image_chunk(request: Request):
-    """
-    🎯 이미지 정보 가공 후 고객사 웹훅(Target REST API)으로 
-    source_filename, global_prefix, chunks([page_no, text]) 규격에 맞춰 전송
-    """
     try:
         body = await request.json()
         print("📦 [수신된 이미지 청크 정보]:", body)
 
-        # 1. 중첩 페이로드 언패킹
         if isinstance(body.get("global_prefix"), dict):
             inner_data = body.get("global_prefix")
             for k, v in inner_data.items():
@@ -251,16 +338,14 @@ async def save_image_chunk(request: Request):
         image_type = str(body.get("image_type") or body.get("imageType") or "TABLE")
         tags = str(body.get("tags") or "")
 
-        # 설정 조회 및 외부 이미지 업로드 설정 추출
         saved_config = get_config()
         ext_upload_url = str(body.get("external_image_upload_url") or body.get("externalImageUploadUrl") or saved_config.get("image_upload_url") or "")
         ext_token = str(body.get("external_image_token") or body.get("externalImageToken") or saved_config.get("image_server_token") or "")
         file_field_name = str(body.get("file_field_name") or saved_config.get("file_field_name") or "file")
         response_url_key = str(body.get("response_url_key") or saved_config.get("response_url_key") or "auto")
 
-        # 2. 외부 이미지 서버 이관 업로드 처리
         if ext_upload_url and ext_upload_url.strip() and input_image_url:
-            filename_part = input_image_url.split("/")[-1]
+            filename_part = input_image_url.split("/")[-1].split("?")[0]
             user_img_dir = get_user_workspace(user_id=user_id, subfolder="images")
             local_image_path = os.path.join(user_img_dir, filename_part)
 
@@ -275,7 +360,6 @@ async def save_image_chunk(request: Request):
                 if remote_url:
                     final_image_url = remote_url
 
-        # 3. 텍스트/메타데이터 정제 및 본문 가공 (마크다운 정제 적용)
         caption_str = f"캡션: {caption}\n" if caption else ""
         type_str = f"유형: {image_type}\n" if image_type else ""
         tag_str = f"태그: {tags}\n" if tags else ""
@@ -283,14 +367,12 @@ async def save_image_chunk(request: Request):
         raw_content_body = f"![이미지]({final_image_url})\n\n{caption_str}{type_str}{tag_str}\n{ocr_text.strip()}".strip()
         clean_plain_text = strip_markdown(raw_content_body)
 
-        # 4. global_prefix가 있는 경우 맨 앞에 [Prefix] 형태로 삽입
         clean_prefix = strip_markdown(global_prefix)
         if clean_prefix:
             final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
         else:
             final_text = clean_plain_text
 
-        # 5. 설정된 고객사 Target REST API (웹훅) 주소 확보
         target_url = body.get("target_api_url") or saved_config.get("target_api_url")
         api_key = body.get("api_key") or saved_config.get("api_key")
 
@@ -300,7 +382,6 @@ async def save_image_chunk(request: Request):
                 detail="설정된 Target REST API (Webhook) URL이 없습니다. RAG 연동 설정을 확인해 주세요."
             )
 
-        # 6. 최신 웹훅 전송 규격 데이터 포맷팅 (source_filename 상위, chunks 내부 page_no, text)
         webhook_payload = {
             "user_name": user_name,
             "global_prefix": clean_prefix,
@@ -313,7 +394,6 @@ async def save_image_chunk(request: Request):
             ]
         }
 
-        # 7. 동기 HTTP 요청을 별도 스레드로 분리하여 셀프 데드락 방지
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"Bearer {api_key}"

@@ -22,6 +22,7 @@ export const fetchServerConfigApi = async () => {
     return { 
       target_api_url: "", 
       api_key: "",
+      gemini_api_key: "",
       image_upload_url: "",
       image_server_token: "",
       file_field_name: "file",
@@ -88,7 +89,25 @@ export const uploadImageApi = async (file) => {
 };
 
 /**
- * 5. 텍스트 정제 완료된 청크 데이터를 고객사 Target REST API 및 지식 DB로 전송
+ * ✨ 5. Gemini Vision 메타데이터 자동 추출 API 요청 (신규 추가)
+ */
+export const extractVisionApi = async (payload) => {
+  const response = await fetch(`${API_BASE_URL}/api/extract-vision`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || 'Gemini Vision 자동 분석에 실패했습니다.');
+  }
+
+  return await response.json();
+};
+
+/**
+ * 6. 텍스트 정제 완료된 청크 데이터를 고객사 Target REST API 및 지식 DB로 전송
  */
 export const saveChunksApi = async (globalPrefix, chunks) => {
   const targetApiUrl = localStorage.getItem('aimeow_target_api_url') || '';
@@ -113,32 +132,38 @@ export const saveChunksApi = async (globalPrefix, chunks) => {
 };
 
 /**
- * 6. 정제 완료된 이미지 청크 데이터를 지식 DB로 전송
+ * 7. 정제 완료된 이미지 청크 데이터를 지식 DB로 전송
  */
-export const saveImageChunkApi = async (globalPrefix, imageData) => {
-  const targetApiUrl = localStorage.getItem('aimeow_target_api_url') || '';
-  const apiKey = localStorage.getItem('aimeow_api_key') || '';
+export const saveImageChunkApi = async (payloadOrPrefix, imageData = null) => {
+  let bodyPayload = {};
+
+  if (typeof payloadOrPrefix === 'object' && payloadOrPrefix !== null) {
+    bodyPayload = payloadOrPrefix;
+  } else {
+    bodyPayload = {
+      global_prefix: payloadOrPrefix,
+      image_data: imageData,
+      target_api_url: localStorage.getItem('aimeow_target_api_url') || '',
+      api_key: localStorage.getItem('aimeow_api_key') || ''
+    };
+  }
 
   const response = await fetch(`${API_BASE_URL}/api/save-image-chunk`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      global_prefix: globalPrefix,
-      image_data: imageData,
-      target_api_url: targetApiUrl,
-      api_key: apiKey
-    })
+    body: JSON.stringify(bodyPayload)
   });
 
   if (!response.ok) {
-    throw new Error("이미지 청크 지식 DB 적재에 실패했습니다.");
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.detail || "이미지 청크 지식 DB 적재에 실패했습니다.");
   }
 
   return await response.json();
 };
 
 /**
- * 7. 서버 연동 설정(Target REST API URL / Bearer Token / 이미지 서버) 저장 요청
+ * 8. 서버 연동 설정(Target REST API / Gemini API / 이미지 서버) 저장 요청
  */
 export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => {
   let payload = {};
@@ -147,9 +172,9 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
     payload = {
       target_api_url: targetApiUrlOrConfig.target_api_url || targetApiUrlOrConfig.targetApiUrl || '',
       api_key: targetApiUrlOrConfig.api_key || targetApiUrlOrConfig.apiKey || '',
+      gemini_api_key: targetApiUrlOrConfig.gemini_api_key || targetApiUrlOrConfig.geminiApiKey || '', // ✨ Gemini Key 반영
       image_upload_url: targetApiUrlOrConfig.image_upload_url || targetApiUrlOrConfig.imageUploadUrl || '',
       image_server_token: targetApiUrlOrConfig.image_server_token || targetApiUrlOrConfig.imageServerToken || '',
-      // 🎯 누락되었던 file_field_name, response_url_key 추가 반영
       file_field_name: targetApiUrlOrConfig.file_field_name || targetApiUrlOrConfig.fileFieldName || 'file',
       response_url_key: targetApiUrlOrConfig.response_url_key || targetApiUrlOrConfig.responseUrlKey || 'auto'
     };
@@ -157,6 +182,7 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
     payload = {
       target_api_url: targetApiUrlOrConfig || '',
       api_key: apiKey || '',
+      gemini_api_key: '',
       file_field_name: 'file',
       response_url_key: 'auto'
     };
@@ -177,7 +203,7 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
 };
 
 /**
- * 8. 이미지 OCR 처리 요청
+ * 9. 이미지 OCR 처리 요청
  */
 export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_user') => {
   const formData = new FormData();

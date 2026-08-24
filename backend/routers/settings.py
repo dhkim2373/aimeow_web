@@ -9,10 +9,11 @@ from config import load_server_config, save_server_config, settings
 router = APIRouter(prefix="/api", tags=["Settings"])
 
 
-# 🐾 Pydantic 모델: 새로 추가된 file_field_name, response_url_key 포함
+# 🐾 Pydantic 모델: gemini_api_key 필드 추가
 class ConfigRequest(BaseModel):
     target_api_url: Optional[str] = ""
     api_key: Optional[str] = ""
+    gemini_api_key: Optional[str] = ""          # ✨ Gemini API Key 추가
     image_upload_url: Optional[str] = ""
     image_server_token: Optional[str] = ""
     file_field_name: Optional[str] = "file"      # 🎯 Form Data 파일 키 (기본값: "file")
@@ -25,6 +26,7 @@ def get_config():
     try:
         config_data = load_server_config()
         # 기본값 폴백 보장
+        config_data.setdefault("gemini_api_key", os.getenv("GEMINI_API_KEY", ""))
         config_data.setdefault("file_field_name", "file")
         config_data.setdefault("response_url_key", "auto")
         return config_data
@@ -33,6 +35,7 @@ def get_config():
         return {
             "target_api_url": getattr(settings, "TARGET_REST_API_URL", ""),
             "api_key": getattr(settings, "TARGET_REST_API_KEY", ""),
+            "gemini_api_key": getattr(settings, "GEMINI_API_KEY", os.getenv("GEMINI_API_KEY", "")),
             "image_upload_url": getattr(settings, "IMAGE_UPLOAD_URL", ""),
             "image_server_token": getattr(settings, "IMAGE_SERVER_TOKEN", ""),
             "file_field_name": getattr(settings, "FILE_FIELD_NAME", "file"),
@@ -47,6 +50,7 @@ def save_config(config: ConfigRequest):
         data = {
             "target_api_url": (config.target_api_url or "").strip(),
             "api_key": (config.api_key or "").strip(),
+            "gemini_api_key": (config.gemini_api_key or "").strip(),  # ✨ Gemini API Key 저장 반영
             "image_upload_url": (config.image_upload_url or "").strip(),
             "image_server_token": (config.image_server_token or "").strip(),
             "file_field_name": (config.file_field_name or "file").strip(),

@@ -1,12 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import UploadBox from '../components/ui/UploadBox';
 import LoadingView from '../components/ui/LoadingView';
-import { extractPdfImagesApi, uploadImageApi, saveImageChunkApi } from '../api/chunkingApi';
+import { 
+  extractPdfImagesApi, 
+  uploadImageApi, 
+  saveImageChunkApi, 
+  extractVisionApi // 🐾 API 연동 함수 추가
+} from '../api/chunkingApi';
 
 const imageGuideSteps = [
   { num: '01', title: '📁 파일/클립보드 업로드', desc: 'PDF, 이미지 드래그 또는 Ctrl+V' },
   { num: '02', title: '🖼️ 이미지 선택', desc: '페이지별 렌더링 이미지 선택' },
-  { num: '03', title: '✍️ 메타데이터 작성', desc: '수동 텍스트/표/캡션 입력' },
+  { num: '03', title: '✨ Vision 자동 정제', desc: 'Gemini AI 추출 또는 수동 보정' },
   { num: '04', title: '💾 지식 DB 저장', desc: 'URL + 정보 최종 적재' }
 ];
 
@@ -29,7 +34,7 @@ const getImageUrl = (img) => {
   return `${backendHost}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
-// 지식 DB 저장 및 서빙 URL 표시용 헬퍼 (blob 주소가 전송되는 것을 원천 차단)
+// 지식 DB 저장 및 서빙 URL 표시용 헬퍼 (blob 주소 차단)
 const getHttpServerUrl = (img) => {
   if (!img) return '';
   const url = img.preview_url || img.image_server_url || img.url || img.image_url || '';
@@ -201,6 +206,21 @@ const styles = {
     backgroundColor: '#cbd5e1',
     borderRadius: '2px'
   },
+  visionBtn: {
+    backgroundColor: '#7c3aed',
+    color: '#ffffff',
+    border: 'none',
+    borderRadius: '8px',
+    padding: '6px 12px',
+    fontSize: '12px',
+    fontWeight: '800',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)',
+    transition: 'all 0.2s ease'
+  },
   saveBtn: {
     marginTop: '16px',
     padding: '14px',
@@ -228,6 +248,9 @@ function ImageChunkingPage() {
   const [imageType, setImageType] = useState('TABLE');
   const [tags, setTags] = useState('');
 
+  // 🐾 Vision AI 자동 추출 상태
+  const [analyzingVision, setAnalyzingVision] = useState(false);
+
   const [leftWidth, setLeftWidth] = useState(50);
   const [isResizing, setIsResizing] = useState(false);
   const wrapperRef = useRef(null);
@@ -237,10 +260,9 @@ function ImageChunkingPage() {
     setIsResizing(true);
   };
 
-  // 📋 [신규 기능] 전역 클립보드 붙여넣기(Ctrl + V) 감지 핸들러
+  // 📋 클립보드 붙여넣기(Ctrl + V) 핸들러
   useEffect(() => {
     const handleGlobalPaste = async (e) => {
-      // 업로드 대기 상태일 때만 붙여넣기 허용
       if (step !== 'upload') return;
 
       const items = e.clipboardData?.items;
@@ -287,7 +309,7 @@ function ImageChunkingPage() {
     };
   }, [isResizing]);
 
-  // 🎯 파일 업로드 핸들러 (PDF 또는 이미지/클립보드 공통)
+  // 🎯 파일 업로드 핸들러
   const handleFileUpload = async (file) => {
     setStep('loading');
     setSourceFilename(file.name);
@@ -346,7 +368,45 @@ function ImageChunkingPage() {
     setTags('');
   };
 
-  // 🎯 작업 초기화 (전체 상태 리셋 및 업로드 화면으로 전환)
+  // 🎯 ✨ Gemini Vision AI 자동 추출 핸들러
+  const handleExtractVision = async () => {
+    if (!imageServerUrl) {
+      alert("⚠️ 먼저 분석할 이미지를 선택해 주세요.");
+      return;
+    }
+
+    try {
+      setAnalyzingVision(true);
+      const res = await extractVisionApi({
+        image_url: imageServerUrl,
+        user_id: 'default_user'
+      });
+
+      if (res?.data) {
+        const { manual_text, caption: newCaption, image_type, tags: newTags } = res.data;
+        if (manual_text) setManualText(manual_text);
+        if (newCaption) setCaption(newCaption);
+        if (newTags) setTags(newTags);
+
+        // 유형 매핑
+        if (image_type) {
+          if (image_type.includes('표') || image_type.includes('양식')) setImageType('TABLE');
+          else if (image_type.includes('다이어그램') || image_type.includes('구조도')) setImageType('DIAGRAM');
+          else if (image_type.includes('차트') || image_type.includes('그래프')) setImageType('CHART');
+          else setImageType('PHOTO');
+        }
+
+        alert("✨ Gemini Vision으로 텍스트 및 메타데이터 자동 추출이 완료되었습니다!");
+      }
+    } catch (err) {
+      console.error("Vision 자동 분석 오류:", err);
+      alert(err.message || "Gemini Vision 자동 분석 중 오류가 발생했습니다. Gemini API 키 설정을 확인해 주세요.");
+    } finally {
+      setAnalyzingVision(false);
+    }
+  };
+
+  // 🎯 작업 초기화
   const handleReset = () => {
     if (window.confirm("현재 업로드된 이미지 및 작성 중인 작업 내용이 모두 초기화됩니다. 진행하시겠습니까?")) {
       setStep('upload');
@@ -435,7 +495,6 @@ function ImageChunkingPage() {
                   총 {Array.isArray(imageList) ? imageList.length : 0}개의 이미지 추출됨
                 </span>
 
-                {/* 🎯 작업 초기화 버튼 */}
                 <button type="button" style={styles.resetBtn} onClick={handleReset}>
                   <span>🔄</span>
                   <span>작업 초기화</span>
@@ -502,10 +561,25 @@ function ImageChunkingPage() {
               <div style={styles.rightMetaPanel(leftWidth)}>
                 {selectedImage ? (
                   <>
-                    <div style={{ marginBottom: '14px' }}>
+                    <div style={{ marginBottom: '14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <h3 style={{ margin: 0, fontSize: '15px', fontWeight: '800', color: '#0f172a' }}>
                         ⚙️ 이미지 메타데이터 및 내용 수동 정제
                       </h3>
+                      
+                      {/* ✨ Gemini Vision 자동 분석 버튼 */}
+                      <button
+                        type="button"
+                        style={{
+                          ...styles.visionBtn,
+                          opacity: analyzingVision ? 0.7 : 1,
+                          cursor: analyzingVision ? 'not-allowed' : 'pointer'
+                        }}
+                        onClick={handleExtractVision}
+                        disabled={analyzingVision}
+                      >
+                        <span>{analyzingVision ? '⏳' : '✨'}</span>
+                        <span>{analyzingVision ? 'Vision 분석 중...' : 'Gemini Vision 자동 추출'}</span>
+                      </button>
                     </div>
 
                     <div style={{ marginBottom: '12px' }}>
@@ -530,7 +604,7 @@ function ImageChunkingPage() {
                         placeholder={"이미지에 포함된 주요 내용이나 표(|---|---|)를 직접 작성하세요.\n\n예시:\n| 항목 | 내용 |\n| --- | --- |\n| 변경건 | 바코드 스캔 기능 추가 |"}
                         style={{ 
                           width: '100%', 
-                          flex: 1,
+                          flex: 1, 
                           minHeight: '200px',
                           padding: '10px', 
                           border: '1px solid #cbd5e1', 
@@ -570,7 +644,7 @@ function ImageChunkingPage() {
                           <option value="TABLE">표 / 양식</option>
                           <option value="DIAGRAM">다이어그램 / 순서도</option>
                           <option value="CHART">차트 / 그래프</option>
-                          <option value="PHOTO">현장 사진</option>
+                          <option value="PHOTO">현장 사진 / UI</option>
                         </select>
                       </div>
                     </div>
