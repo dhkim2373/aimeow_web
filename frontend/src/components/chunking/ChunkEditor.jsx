@@ -14,14 +14,14 @@ const styles = {
     flexDirection: 'column', 
     boxSizing: 'border-box'
   }),
-  pageChunkBtn: {
+  autoChunkBtn: {
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
-    padding: '3px 10px',
+    padding: '4px 12px',
     backgroundColor: '#eff6ff',
-    color: '#1d4ed8',
-    border: '1px solid #93c5fd',
+    color: '#2563eb',
+    border: '1px solid #bfdbfe',
     borderRadius: '6px',
     fontSize: '12px',
     fontWeight: '700',
@@ -91,7 +91,7 @@ function ChunkEditor({
   insertLineAbove, 
   deleteLine, 
   deletePageLines,
-  chunkByPage, 
+  chunkByPage, // 👈 부모 컴포넌트(ChunkingPage)에서 넘겨받은 handleAutoMarkdownSplit 함수
   deleteTopNLinesPerPage,
   deleteBottomNLinesPerPage,
   toggleSplit, 
@@ -141,13 +141,14 @@ function ChunkEditor({
           <span style={{ fontSize: '12px', backgroundColor: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>EDIT</span>
           <h3 style={{ margin: 0, color: '#0f172a', fontSize: '14px', fontWeight: '700' }}>수동 청크 경계면 스크래치</h3>
           
+          {/* ✨ 페이지별 청킹 버튼을 제거하고 그 자리에 AI 자동 청킹 버튼 장착 */}
           <button 
             type="button"
-            style={styles.pageChunkBtn} 
+            style={styles.autoChunkBtn} 
             onClick={chunkByPage}
-            title="페이지가 바뀌는 위치에 자동으로 청킹 구분 라인을 넣습니다."
+            title="LangChain 마크다운 헤더 구조 기반으로 절단선을 자동으로 배치합니다."
           >
-            📄 페이지별 청킹
+            🪄 AI 자동 청킹
           </button>
         </div>
 

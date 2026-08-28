@@ -3,7 +3,7 @@ import UploadBox from '../components/ui/UploadBox';
 import LoadingView from '../components/ui/LoadingView';
 import PdfViewer from '../components/chunking/PdfViewer';
 import ChunkEditor from '../components/chunking/ChunkEditor';
-import { uploadPdfApi, saveChunksApi } from '../api/chunkingApi';
+import { uploadPdfApi, saveChunksApi, splitMarkdownApi } from '../api/chunkingApi';
 
 // 🐾 텍스트 청킹 화면 전용 동영상 import
 import catCuttingVideo from '../assets/cat_cutting.mp4';
@@ -85,7 +85,7 @@ const styles = {
   },
   globalPrefixInput: {
     flex: 1,
-    maxWidth: '420px',
+    maxWidth: '360px',
     padding: '6px 12px',
     backgroundColor: '#ffffff',
     border: '1px solid #cbd5e1',
@@ -98,7 +98,7 @@ const styles = {
   headerRightGroup: {
     display: 'flex',
     alignItems: 'center',
-    gap: '12px',
+    gap: '10px',
     whiteSpace: 'nowrap',
     flexShrink: 0
   },
@@ -224,6 +224,37 @@ function ChunkingPage() {
     }
   };
 
+const handleAutoMarkdownSplit = async () => {
+    if (!lines || lines.length === 0) {
+      alert("분할할 텍스트 라인이 존재하지 않습니다.");
+      return;
+    }
+
+    const confirmRun = window.confirm(
+      "🪄 AI 마크다운 헤더를 복원하여 자동 청킹을 수행하시겠습니까?"
+    );
+    if (!confirmRun) return;
+
+    try {
+      saveToHistory(lines);
+
+      const response = await splitMarkdownApi(lines);
+      const updatedLines = response.lines || [];
+
+      if (updatedLines.length === 0) {
+        alert("변환된 데이터가 없습니다.");
+        return;
+      }
+
+      // 상위 헤더 라인이 포함된 새로운 라인 배열로 화면 갱신
+      setLines(updatedLines);
+
+      alert(`✨ 상위 헤더 복원 및 자동 청킹이 완료되었습니다!`);
+    } catch (err) {
+      alert(err.message || "자동 마크다운 분할 중 오류가 발생했습니다.");
+    }
+  };
+
   const handleReset = () => {
     const confirmReset = window.confirm(
       "⚠️ 현재 작업 중인 정제 데이터가 모두 사라집니다.\n정말로 초기화하고 처음(파일 업로드)으로 돌아가시겠습니까?"
@@ -254,24 +285,6 @@ function ChunkingPage() {
     setLines(prevLines => 
       prevLines.filter(line => (line.page_number || 1) !== targetPageNum)
     );
-  };
-
-  const chunkByPage = () => {
-    saveToHistory(lines);
-    setLines(prevLines => {
-      return prevLines.map((line, i) => {
-        const currentPage = line.page_number || 1;
-        const nextLine = prevLines[i + 1];
-        const nextPage = nextLine ? (nextLine.page_number || 1) : null;
-
-        const isLastLineOfPage = nextPage !== null && nextPage !== currentPage;
-
-        return {
-          ...line,
-          is_split_point: isLastLineOfPage
-        };
-      });
-    });
   };
 
   const deleteTopNLinesPerPage = (topCount) => {
@@ -364,7 +377,7 @@ function ChunkingPage() {
   return (
     <div style={styles.fullContainer}>
       <div style={styles.mainCard}>
-        {/* Step 1: 업로드 (스마트 텍스트 청킹 전용 가이드 및 cat_cutting.mp4 전달) */}
+        {/* Step 1: 업로드 */}
         {step === 'upload' && (
           <UploadBox 
             onFileUpload={handleFileUpload} 
@@ -408,7 +421,7 @@ function ChunkingPage() {
 
               <div style={styles.headerRightGroup}>
                 <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
-                  * 💡 실수했을 땐 **Ctrl + Z**로 원복 가능!
+                  * 💡 **Ctrl + Z** 원복 가능!
                 </span>
                 <button style={styles.resetBtn} onClick={handleReset} title="작업 취소 및 초기화">
                   🔄 작업 초기화
@@ -442,7 +455,7 @@ function ChunkingPage() {
                 insertLineAbove={insertLineAbove}
                 deleteLine={deleteLine}
                 deletePageLines={deletePageLines}
-                chunkByPage={chunkByPage}
+                chunkByPage={handleAutoMarkdownSplit} // 👈 에디터 내부 버튼에 AI 자동 청킹 함수 연결
                 deleteTopNLinesPerPage={deleteTopNLinesPerPage}
                 deleteBottomNLinesPerPage={deleteBottomNLinesPerPage}
                 toggleSplit={toggleSplit}

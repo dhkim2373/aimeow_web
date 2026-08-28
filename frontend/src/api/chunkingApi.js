@@ -223,6 +223,24 @@ export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_
   return await response.json();
 };
 
+/**
+ * 10. 마크다운 라인 배열을 백엔드로 보내어 MarkdownHeaderTextSplitter 기준 절단선 인덱스 요청
+ */
+export const splitMarkdownApi = async (lines) => {
+  const response = await fetch(`${API_BASE_URL}/api/chunking/markdown-split`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ lines })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || '마크다운 자동 청킹 처리에 실패했습니다.');
+  }
+
+  return await response.json();
+};
+
 // 🎯 [별칭 내보내기]
 export const getSettingsConfig = fetchServerConfigApi;
 export const saveSettingsConfig = saveServerConfigApi;

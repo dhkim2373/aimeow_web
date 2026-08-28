@@ -10,6 +10,7 @@ from typing import Optional
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from config import get_user_workspace
 from routers.settings import get_config
+from langchain_text_splitters import MarkdownHeaderTextSplitter
 
 router = APIRouter(prefix="/api", tags=["Text Chunking"])
 
@@ -25,6 +26,93 @@ def strip_markdown(text_content: str) -> str:
     lines = [line.strip() for line in text_content.split('\n') if line.strip()]
     return "\n".join(lines)
 
+
+@router.post("/chunking/markdown-split")
+def split_markdown_text(data: dict):
+    lines_payload = data.get("lines", [])
+    text = data.get("text", "")
+    
+    if not lines_payload and text:
+        lines_payload = [{"text": line, "page_number": 1} for line in text.split('\n') if line.strip()]
+
+    full_text = "\n".join([item.get("text", "") for item in lines_payload])
+    
+    headers_to_split_on = [
+        ("#", "Header 1"),
+        ("##", "Header 2"),
+        ("###", "Header 3"),
+        ("####", "Header 4"),
+    ]
+    splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
+    splits = splitter.split_text(full_text)
+    
+    new_response_lines = []
+    global_idx = 0
+    current_search_idx = 0
+    
+    for idx, split in enumerate(splits):
+        metadata = split.metadata
+        content = split.page_content
+        
+        # 1. 현재 청크에 속한 상위 헤더들을 라인으로 생성
+        header_lines_to_add = []
+        for header_key in ["Header 1", "Header 2", "Header 3", "Header 4"]:
+            if header_key in metadata:
+                level = header_key[-1]
+                hashes = "#" * int(level)
+                header_text = f"{hashes} {metadata[header_key]}"
+                header_lines_to_add.append(header_text)
+        
+        # 상위 헤더 추가 (페이지 번호는 현재 검색 중인 원본 라인의 페이지 번호 상속)
+        current_page = 1
+        if current_search_idx < len(lines_payload):
+            current_page = lines_payload[current_search_idx].get("page_number", 1)
+
+        for h_text in header_lines_to_add:
+            new_response_lines.append({
+                "line_index": f"header_{global_idx}",
+                "text": h_text,
+                "is_split_point": False,
+                "is_deleted": False,
+                "page_number": current_page,
+                "source_filename": lines_payload[0].get("source_filename", "") if lines_payload else ""
+            })
+            global_idx += 1
+
+        # 2. 본문 내용 라인 처리 및 마지막 줄 절단선(is_split_point) 매핑
+        content_lines = [l.strip() for l in content.split('\n') if l.strip()]
+        
+        for c_idx, c_line in enumerate(content_lines):
+            is_last = (c_idx == len(content_lines) - 1)
+            
+            # 원본 라인에서 해당 텍스트를 찾아 원래의 page_number와 line_index를 최대한 유지
+            matched_page = current_page
+            matched_line_idx = f"content_{global_idx}"
+            
+            found_original = False
+            for i in range(current_search_idx, len(lines_payload)):
+                orig_text = lines_payload[i].get("text", "").strip()
+                if orig_text == c_line or c_line in orig_text:
+                    matched_page = lines_payload[i].get("page_number", current_page)
+                    matched_line_idx = lines_payload[i].get("line_index", f"content_{global_idx}")
+                    current_search_idx = i + 1
+                    found_original = True
+                    break
+            
+            new_response_lines.append({
+                "line_index": matched_line_idx,
+                "text": c_line,
+                "is_split_point": is_last, # 청크의 마지막 줄에 정확히 절단선 지정
+                "is_deleted": False,
+                "page_number": int(matched_page),
+                "source_filename": lines_payload[0].get("source_filename", "") if lines_payload else ""
+            })
+            global_idx += 1
+
+    return {
+        "status": "success",
+        "lines": new_response_lines
+    }
 
 @router.post("/upload-pdf")
 async def upload_pdf(
@@ -88,7 +176,7 @@ async def upload_pdf(
 @router.post("/save-chunks")
 async def save_chunks(request: Request):
     """
-    🎯 텍스트 청크 저장 및 웹훅 전송 (PDF 파싱 및 텍스트 직접 입력 즉시 저장 공용 활용)
+    🎯 텍스트 청크 저장 및 웹훅 전송
     """
     try:
         body = await request.json()
@@ -127,22 +215,17 @@ async def save_chunks(request: Request):
 
             current_chunk_buffer.append(item_text)
 
-            # 분할 지점(is_split_point)이거나 마지막 라인인 경우 청크 완성
             if is_split_point or idx == len(raw_chunks) - 1:
                 raw_markdown_content = "\n".join(current_chunk_buffer).strip()
 
                 if raw_markdown_content:
-                    # 마크다운 정제 (순수 텍스트)
                     clean_plain_text = strip_markdown(raw_markdown_content)
-
-                    # global_prefix가 있는 경우 맨 앞에 [Prefix] 형태로 삽입
                     clean_prefix = strip_markdown(global_prefix)
                     if clean_prefix:
                         final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
                     else:
                         final_text = clean_plain_text
 
-                    # 페이지 범위 조합 ("1" 또는 "1~3")
                     if chunk_page_start == chunk_page_end:
                         page_no_str = str(chunk_page_start)
                     else:
@@ -153,12 +236,10 @@ async def save_chunks(request: Request):
                         "text": final_text
                     })
 
-                # 다음 청크를 위한 상태 초기화
                 current_chunk_buffer = []
                 chunk_page_start = None
                 chunk_page_end = None
 
-        # RAG 연동 설정 조회
         saved_config = get_config()
         target_url = body.get("target_api_url") or saved_config.get("target_api_url")
         api_key = body.get("api_key") or saved_config.get("api_key")
@@ -169,7 +250,6 @@ async def save_chunks(request: Request):
                 detail="설정된 Target REST API (Webhook) URL이 없습니다. RAG 연동 설정을 확인해 주세요."
             )
 
-        # 🎯 웹훅 전송 최종 페이로드
         webhook_payload = {
             "user_name": user_name,
             "global_prefix": strip_markdown(global_prefix),
