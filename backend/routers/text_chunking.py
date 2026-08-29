@@ -11,9 +11,54 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Request
 from config import get_user_workspace
 from routers.settings import get_config
 from langchain_text_splitters import MarkdownHeaderTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 router = APIRouter(prefix="/api", tags=["Text Chunking"])
 
+# 🎯 랭체인 멀티 구분자 리커시브 캐릭터 스플리터 적용 엔드포인트
+@router.post("/chunking/recursive-split")
+def recursive_split_text(data: dict):
+    """
+    🎯 청크 사이즈가 0이거나 없을 경우 랭체인 강제 분할을 거치지 않고 오직 멀티 구분자로만 순수 분할
+    """
+    text_content = data.get("text", "")
+    chunk_size = int(data.get("chunk_size", 500))
+    chunk_overlap = int(data.get("chunk_overlap", 50))
+    delimiters = data.get("delimiters", ["\n\n", "\n", " ", ""])
+    
+    if not text_content.strip():
+        return {"status": "success", "chunks": []}
+
+    # 💡 청크 사이즈를 0으로 준 경우: 오직 첫 번째(가장 큰 단위) 구분자로만 순수 분할
+    if chunk_size <= 0:
+        primary_delimiter = delimiters[0] if delimiters else "\n\n"
+        raw_chunks = text_content.split(primary_delimiter)
+        split_texts = [c.strip() for c in raw_chunks if c.strip()]
+    else:
+        # 일반적인 랭체인 리커시브 스플리터 수행
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+            separators=delimiters,
+            length_function=len,
+        )
+        split_texts = splitter.split_text(text_content)
+    
+    preview_chunks = []
+    for idx, chunk_text in enumerate(split_texts):
+        clean_plain_text = strip_markdown(chunk_text)
+        if clean_plain_text:
+            preview_chunks.append({
+                "chunk_index": idx + 1,
+                "raw_content": chunk_text,
+                "clean_text": clean_plain_text,
+                "line_count": len(chunk_text.split('\n'))
+            })
+
+    return {
+        "status": "success",
+        "chunks": preview_chunks
+    }
 
 def strip_markdown(text_content: str) -> str:
     """마크다운 태그, 강조, 헤더 및 HTML 줄바꿈 제거"""

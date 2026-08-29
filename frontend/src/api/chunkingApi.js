@@ -227,7 +227,6 @@ export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_
  * 10. 마크다운 라인 배열을 백엔드로 보내어 MarkdownHeaderTextSplitter 기준 자동 분할 요청
  */
 export const splitMarkdownApi = async (payload) => {
-  // payload가 배열 형태({ lines })이든 객체 형태든 안전하게 처리할 수 있도록 보정
   const bodyData = Array.isArray(payload) ? { lines: payload } : payload;
 
   const response = await fetch(`${API_BASE_URL}/api/chunking/markdown-split`, {
@@ -239,6 +238,29 @@ export const splitMarkdownApi = async (payload) => {
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
     throw new Error(errorData.detail || '마크다운 자동 청킹 처리에 실패했습니다.');
+  }
+
+  return await response.json();
+};
+
+/**
+ * 🧩 11. 서버 랭체인 멀티 구분자 리커시브 캐릭터 스플리터 요청
+ */
+export const recursiveSplitApi = async (text, chunkSize, chunkOverlap, delimiters) => {
+  const response = await fetch(`${API_BASE_URL}/api/chunking/recursive-split`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: text,
+      chunk_size: chunkSize,
+      chunk_overlap: chunkOverlap,
+      delimiters: delimiters
+    })
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json().catch(() => ({}));
+    throw new Error(errorData.detail || '랭체인 리커시브 청킹 처리에 실패했습니다.');
   }
 
   return await response.json();
