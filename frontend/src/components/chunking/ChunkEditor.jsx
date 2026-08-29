@@ -14,20 +14,6 @@ const styles = {
     flexDirection: 'column', 
     boxSizing: 'border-box'
   }),
-  autoChunkBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '4px 12px',
-    backgroundColor: '#eff6ff',
-    color: '#2563eb',
-    border: '1px solid #bfdbfe',
-    borderRadius: '6px',
-    fontSize: '12px',
-    fontWeight: '700',
-    cursor: 'pointer',
-    outline: 'none'
-  },
   utilToolbar: {
     display: 'flex',
     alignItems: 'center',
@@ -88,17 +74,15 @@ function ChunkEditor({
   activePage, 
   setActivePage, 
   handleTextChange, 
-  insertLineAbove, 
   deleteLine, 
   deletePageLines,
-  chunkByPage, // 👈 부모 컴포넌트(ChunkingPage)에서 넘겨받은 handleAutoMarkdownSplit 함수
+  chunkByPage, 
   deleteTopNLinesPerPage,
   deleteBottomNLinesPerPage,
-  toggleSplit, 
-  handleSave 
+  handleSave,
+  onSetLineMarkdownLevel 
 }) {
   const scrollContainerRef = useRef(null);
-  const [scrollTop, setScrollTop] = useState(0);
 
   const [topCount, setTopCount] = useState(1);
   const [bottomCount, setBottomCount] = useState(1);
@@ -119,41 +103,16 @@ function ChunkEditor({
     }
   };
 
-  const ROW_HEIGHT = 38; 
-  const BUFFER_COUNT = 15;
-
-  const handleScroll = (e) => {
-    setScrollTop(e.target.scrollTop);
-  };
-
-  const totalHeight = lines.length * ROW_HEIGHT;
-  const containerHeight = 600; 
-  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - BUFFER_COUNT);
-  const endIndex = Math.min(lines.length - 1, Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + BUFFER_COUNT);
-
-  const visibleLines = lines.slice(startIndex, endIndex + 1);
-  const offsetY = startIndex * ROW_HEIGHT;
-
   return (
     <div style={styles.rightPanel(leftWidth)}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0, marginBottom: '6px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <span style={{ fontSize: '12px', backgroundColor: '#fbbf24', padding: '2px 8px', borderRadius: '6px', fontWeight: '700' }}>EDIT</span>
-          <h3 style={{ margin: 0, color: '#0f172a', fontSize: '14px', fontWeight: '700' }}>수동 청크 경계면 스크래치</h3>
-          
-          {/* ✨ 페이지별 청킹 버튼을 제거하고 그 자리에 AI 자동 청킹 버튼 장착 */}
-          <button 
-            type="button"
-            style={styles.autoChunkBtn} 
-            onClick={chunkByPage}
-            title="LangChain 마크다운 헤더 구조 기반으로 절단선을 자동으로 배치합니다."
-          >
-            🪄 AI 자동 청킹
-          </button>
+          <h3 style={{ margin: 0, color: '#0f172a', fontSize: '14px', fontWeight: '700' }}>문서 텍스트 정제 및 구조화 에디터</h3>
         </div>
 
         <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '600' }}>
-          ⚡ 슬림 컴팩트 뷰 (총 {lines.length}개 라인)
+          ⚡ 일반 스크롤 뷰 (총 {lines.length}개 라인)
         </span>
       </div>
 
@@ -209,40 +168,32 @@ function ChunkEditor({
       
       <div 
         ref={scrollContainerRef}
-        onScroll={handleScroll}
         style={styles.scrollList}
       >
-        <div style={{ height: `${totalHeight}px`, position: 'relative', width: '100%' }}>
-          <div style={{ transform: `translateY(${offsetY}px)`, position: 'absolute', top: 0, left: 0, right: 0 }}>
-            {visibleLines.map((line, relativeIdx) => {
-              const actualIdx = startIndex + relativeIdx;
+        {lines.map((line, actualIdx) => {
+          const prevLine = actualIdx > 0 ? lines[actualIdx - 1] : null;
+          const isFirstLineOfPage = !prevLine || prevLine.page_number !== line.page_number;
 
-              const prevLine = actualIdx > 0 ? lines[actualIdx - 1] : null;
-              const isFirstLineOfPage = !prevLine || prevLine.page_number !== line.page_number;
-
-              return (
-                <ChunkLineRow
-                  key={line.line_index || actualIdx}
-                  line={line}
-                  actualIdx={actualIdx}
-                  isFirstLineOfPage={isFirstLineOfPage}
-                  isLast={actualIdx === lines.length - 1}
-                  activePage={activePage}
-                  setActivePage={setActivePage}
-                  handleTextChange={handleTextChange}
-                  insertLineAbove={insertLineAbove}
-                  deleteLine={deleteLine}
-                  deletePageLines={deletePageLines}
-                  toggleSplit={toggleSplit}
-                />
-              );
-            })}
-          </div>
-        </div>
+          return (
+            <ChunkLineRow
+              key={line.line_index || actualIdx}
+              line={line}
+              actualIdx={actualIdx}
+              isFirstLineOfPage={isFirstLineOfPage}
+              isLast={actualIdx === lines.length - 1}
+              activePage={activePage}
+              setActivePage={setActivePage}
+              handleTextChange={handleTextChange}
+              deleteLine={deleteLine}
+              deletePageLines={deletePageLines}
+              onSetLineMarkdownLevel={onSetLineMarkdownLevel}
+            />
+          );
+        })}
       </div>
 
-      <button style={styles.saveBtn} onClick={handleSave}>
-        🐾 실타래 정제 완료 및 지식 DB에 적재하기 (전체 {lines.length}개 라인 저장)
+      <button style={styles.saveBtn} onClick={chunkByPage}>
+        🪄 AI 자동 청킹 수행 및 결과 확인하기 (전체 {lines.length}개 라인 기준)
       </button>
     </div>
   );

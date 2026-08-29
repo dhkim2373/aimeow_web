@@ -89,7 +89,7 @@ export const uploadImageApi = async (file) => {
 };
 
 /**
- * ✨ 5. Gemini Vision 메타데이터 자동 추출 API 요청 (신규 추가)
+ * ✨ 5. Gemini Vision 메타데이터 자동 추출 API 요청
  */
 export const extractVisionApi = async (payload) => {
   const response = await fetch(`${API_BASE_URL}/api/extract-vision`, {
@@ -172,7 +172,7 @@ export const saveServerConfigApi = async (targetApiUrlOrConfig, apiKey = '') => 
     payload = {
       target_api_url: targetApiUrlOrConfig.target_api_url || targetApiUrlOrConfig.targetApiUrl || '',
       api_key: targetApiUrlOrConfig.api_key || targetApiUrlOrConfig.apiKey || '',
-      gemini_api_key: targetApiUrlOrConfig.gemini_api_key || targetApiUrlOrConfig.geminiApiKey || '', // ✨ Gemini Key 반영
+      gemini_api_key: targetApiUrlOrConfig.gemini_api_key || targetApiUrlOrConfig.geminiApiKey || '',
       image_upload_url: targetApiUrlOrConfig.image_upload_url || targetApiUrlOrConfig.imageUploadUrl || '',
       image_server_token: targetApiUrlOrConfig.image_server_token || targetApiUrlOrConfig.imageServerToken || '',
       file_field_name: targetApiUrlOrConfig.file_field_name || targetApiUrlOrConfig.fileFieldName || 'file',
@@ -224,13 +224,16 @@ export const processImageOcrApi = async (imageId, previewUrl, userId = 'default_
 };
 
 /**
- * 10. 마크다운 라인 배열을 백엔드로 보내어 MarkdownHeaderTextSplitter 기준 절단선 인덱스 요청
+ * 10. 마크다운 라인 배열을 백엔드로 보내어 MarkdownHeaderTextSplitter 기준 자동 분할 요청
  */
-export const splitMarkdownApi = async (lines) => {
+export const splitMarkdownApi = async (payload) => {
+  // payload가 배열 형태({ lines })이든 객체 형태든 안전하게 처리할 수 있도록 보정
+  const bodyData = Array.isArray(payload) ? { lines: payload } : payload;
+
   const response = await fetch(`${API_BASE_URL}/api/chunking/markdown-split`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ lines })
+    body: JSON.stringify(bodyData)
   });
 
   if (!response.ok) {

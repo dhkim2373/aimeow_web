@@ -1,51 +1,5 @@
 import React, { useState } from 'react';
 
-// 💅 고양이 할퀴기 Keyframes 애니메이션
-const clawStyles = `
-  @keyframes clawSlashAnimation {
-    0% { opacity: 0; transform: scale(0.3) rotate(-25deg); }
-    20% { opacity: 1; transform: scale(1.15) rotate(-15deg); }
-    70% { opacity: 1; transform: scale(1) rotate(-15deg); }
-    100% { opacity: 0; transform: scale(1.05) translate(-20px, 10px) rotate(-10deg); }
-  }
-
-  @keyframes sparkFlash {
-    0% { opacity: 0; transform: scale(0.2); }
-    30% { opacity: 0.9; transform: scale(1.3); }
-    100% { opacity: 0; transform: scale(1.8); }
-  }
-
-  .claw-effect-wrapper {
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 240px;
-    height: 60px;
-    transform: translate(-50%, -50%);
-    pointer-events: none;
-    z-index: 50;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .claw-slash-svg {
-    width: 100%;
-    height: 100%;
-    animation: clawSlashAnimation 0.45s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
-    filter: drop-shadow(0 0 6px rgba(239, 68, 68, 0.8));
-  }
-
-  .spark-effect {
-    position: absolute;
-    width: 100%;
-    height: 100%;
-    background: radial-gradient(circle, rgba(254,202,202,0.8) 0%, rgba(239,68,68,0) 70%);
-    animation: sparkFlash 0.35s ease-out forwards;
-  }
-`;
-
-// 🎨 간단한 마크다운 인라인 뷰어 헬퍼 (굵고 진한 글씨체 반영)
 const renderFormattedText = (text) => {
   if (!text) return null;
 
@@ -59,8 +13,8 @@ const renderFormattedText = (text) => {
 
   return (
     <span style={{ 
-      fontWeight: isHeader ? '800' : '700', // 📌 [수정]: 기본 텍스트 굵기를 700(Bold)으로 강화
-      color: isHeader ? '#1d4ed8' : '#0f172a' // 📌 [수정]: Slate-900 선명한 검은색 계열 적용
+      fontWeight: isHeader ? '800' : '700',
+      color: isHeader ? '#1d4ed8' : '#0f172a'
     }}>
       {parts.map((part, i) => {
         if (part.startsWith('**') && part.endsWith('**')) {
@@ -107,7 +61,7 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    padding: '2px 4px',
+    padding: '4px 4px',
     fontSize: '13px',
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
     borderBottom: '1px solid #f1f5f9',
@@ -123,10 +77,10 @@ const styles = {
     backgroundColor: '#ffffff',
     fontSize: '13px',
     fontFamily: 'inherit',
-    color: '#0f172a',       // 📌 [수정]: 수정 모드 입력창 텍스트 색상 명확화
+    color: '#0f172a',
     outline: 'none',
     padding: '3px 6px',
-    fontWeight: '700'       // 📌 [수정]: 수정 모드 입력창 글씨도 굵게(Bold) 적용
+    fontWeight: '700'
   },
   textPreview: {
     flex: 1,
@@ -137,8 +91,8 @@ const styles = {
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-all',
     userSelect: 'none',
-    fontWeight: '700',      // 📌 [수정]: 미리보기 컨테이너 기본 굵기 Bold 지정
-    color: '#0f172a'        // 📌 [수정]: 흐릿한 회색 대신 진한 검은색 계열 지정
+    fontWeight: '700',
+    color: '#0f172a'
   },
   badge: {
     fontSize: '11px',
@@ -175,18 +129,32 @@ const styles = {
     alignItems: 'center',
     justifyContent: 'center'
   },
-  splitBoundaryLine: (isSplit) => ({
-    position: 'relative',
-    height: isSplit ? '8px' : '4px',
-    margin: '3px 0',
-    backgroundColor: isSplit ? '#ef4444' : '#e2e8f0',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    transition: 'all 0.15s ease',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center'
-  })
+  toggleLevelBtn: (level) => {
+    let bg = '#f1f5f9';
+    let fg = '#64748b';
+    let border = '#cbd5e1';
+
+    if (level === 'H1') { bg = '#eff6ff'; fg = '#2563eb'; border = '#bfdbfe'; }
+    else if (level === 'H2') { bg = '#f0fdf4'; fg = '#16a34a'; border = '#bbf7d0'; }
+    else if (level === 'H3') { bg = '#fffbeb'; fg = '#d97706'; border = '#fde68a'; }
+
+    return {
+      border: `1px solid ${border}`,
+      backgroundColor: bg,
+      color: fg,
+      cursor: 'pointer',
+      fontSize: '10px',
+      fontWeight: '800',
+      width: '24px',
+      height: '22px',
+      borderRadius: '4px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      userSelect: 'none',
+      flexShrink: 0
+    };
+  }
 };
 
 function ChunkLineRow({
@@ -196,20 +164,40 @@ function ChunkLineRow({
   activePage,
   setActivePage,
   handleTextChange,
-  insertLineAbove,
   deleteLine,
   deletePageLines,
-  toggleSplit
+  onSetLineMarkdownLevel
 }) {
-  const [isScratching, setIsScratching] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
-
   const isActivePage = line.page_number && line.page_number === activePage;
 
-  const handleBoundaryClick = () => {
-    setIsScratching(true);
-    toggleSplit(actualIdx);
-    setTimeout(() => setIsScratching(false), 450);
+  const text = line.text || '';
+  let currentLevel = 'C';
+  if (text.startsWith('# ')) currentLevel = 'H1';
+  else if (text.startsWith('## ')) currentLevel = 'H2';
+  else if (text.startsWith('### ')) currentLevel = 'H3';
+
+  const handleToggleLevel = (e) => {
+    e.stopPropagation();
+    if (!onSetLineMarkdownLevel) return;
+
+    if (e.ctrlKey || e.metaKey) {
+      let levelNum = 0;
+      if (currentLevel === 'H1') levelNum = 1;
+      else if (currentLevel === 'H2') levelNum = 2;
+      else if (currentLevel === 'H3') levelNum = 3;
+
+      const levelName = currentLevel === 'C' ? '본문(C)' : `${currentLevel} 헤더`;
+      if (window.confirm(`🪄 [Ctrl 감지] 이 라인과 동일한 번호 체계 패턴을 가진 모든 항목을 [${levelName}]로 일괄 적용하시겠습니까?`)) {
+        onSetLineMarkdownLevel(line.line_index, levelNum, true);
+      }
+      return;
+    }
+
+    if (currentLevel === 'C') onSetLineMarkdownLevel(line.line_index, 1, false);     
+    else if (currentLevel === 'H1') onSetLineMarkdownLevel(line.line_index, 2, false); 
+    else if (currentLevel === 'H2') onSetLineMarkdownLevel(line.line_index, 3, false); 
+    else onSetLineMarkdownLevel(line.line_index, 0, false);                           
   };
 
   const handlePageClick = (e) => {
@@ -228,9 +216,6 @@ function ChunkLineRow({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', position: 'relative' }}>
-      <style>{clawStyles}</style>
-
-      {/* 페이지 구분 헤더 */}
       {isFirstLineOfPage && (
         <div style={styles.pageGroupHeader}>
           <span>📄 PAGE {line.page_number || 1}</span>
@@ -244,20 +229,18 @@ function ChunkLineRow({
         </div>
       )}
 
-      {/* 라인 아이템 바디 */}
       <div 
         style={styles.rowContainer(isActivePage)}
-        onClick={() => line.page_number && setActivePage(line.page_number)} // 🎯 단일 클릭 시 PDF 즉시 이동
+        onClick={() => line.page_number && setActivePage(line.page_number)}
       >
         <button 
-          style={styles.btnAction} 
-          title="위에 빈 라인 추가"
-          onClick={(e) => { e.stopPropagation(); insertLineAbove(actualIdx, line); }}
+          style={styles.toggleLevelBtn(currentLevel)}
+          title={`현재: ${currentLevel} \n- 클릭: 개별 라인 순환 변경 (C ➔ H1 ➔ H2 ➔ H3 ➔ C)\n- Ctrl + 클릭: 현재 상태(${currentLevel})를 동일 등급 전체 일괄 반영`}
+          onClick={handleToggleLevel}
         >
-          ➕
+          {currentLevel}
         </button>
 
-        {/* 🎯 더블 클릭(onDoubleClick) 시 편집창 전환 및 굵은 텍스트(Bold) 스타일링 적용 */}
         {isEditing ? (
           <input
             type="text"
@@ -266,7 +249,7 @@ function ChunkLineRow({
             onChange={(e) => handleTextChange(line.line_index, e.target.value)}
             onBlur={() => setIsEditing(false)}
             onKeyDown={(e) => { if (e.key === 'Enter') setIsEditing(false); }}
-            onClick={(e) => e.stopPropagation()} // 입력창 내부 클릭 시 부모 클릭 방지
+            onClick={(e) => e.stopPropagation()}
             style={styles.textInput}
           />
         ) : (
@@ -296,41 +279,6 @@ function ChunkLineRow({
         >
           ❌
         </button>
-      </div>
-
-      {/* 청크 경계선 */}
-      <div 
-        style={styles.splitBoundaryLine(line.is_split_point)}
-        onClick={handleBoundaryClick}
-        title="클릭하여 청크 경계면 설정/해제"
-      >
-        {isScratching && (
-          <div className="claw-effect-wrapper">
-            <div className="spark-effect" />
-            <svg className="claw-slash-svg" viewBox="0 0 200 60" fill="none">
-              <path d="M 10 10 Q 90 25 180 15" stroke="#dc2626" strokeWidth="6" strokeLinecap="round" />
-              <path d="M 25 28 Q 105 40 190 32" stroke="#b91c1c" strokeWidth="7" strokeLinecap="round" />
-              <path d="M 40 46 Q 120 55 175 50" stroke="#ef4444" strokeWidth="5" strokeLinecap="round" />
-              <path d="M 10 10 Q 90 25 180 15" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" />
-              <path d="M 25 28 Q 105 40 190 32" stroke="#fef08a" strokeWidth="2.5" strokeLinecap="round" />
-            </svg>
-          </div>
-        )}
-
-        {line.is_split_point && (
-          <span style={{ 
-            fontSize: '10px', 
-            color: '#ffffff', 
-            backgroundColor: '#ef4444', 
-            padding: '1px 8px', 
-            borderRadius: '10px',
-            fontWeight: '800',
-            letterSpacing: '0.5px',
-            zIndex: 5
-          }}>
-            ✂️ CHUNK CUT
-          </span>
-        )}
       </div>
     </div>
   );

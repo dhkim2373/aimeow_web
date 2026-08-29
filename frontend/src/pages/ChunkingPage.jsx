@@ -12,8 +12,8 @@ import catCuttingVideo from '../assets/cat_cutting.mp4';
 const textGuideSteps = [
   { num: '01', title: '📄 규정 문서 업로드', desc: 'PDF 문서 선택 및 파일 처리' },
   { num: '02', title: '✂️ 세부 라인 파싱', desc: '문장/줄 단위 자동 구조화' },
-  { num: '03', title: '✏️ 청크 분할 & 정제', desc: '절단선 지정 및 오탈자/여백 편집' },
-  { num: '04', title: '💾 지식 DB 적재', desc: '정제 텍스트 데이터 저장' }
+  { num: '03', title: '✏️ 정제 및 헤더 지정', desc: '불필요한 라인 삭제 및 H1~H3 구조화' },
+  { num: '04', title: '💾 AI 자동 분할 & 적재', desc: '랭체인 기반 분할 확인 후 DB 적재' }
 ];
 
 const styles = {
@@ -139,6 +139,25 @@ const styles = {
     height: '40px', 
     backgroundColor: '#cbd5e1', 
     borderRadius: '2px' 
+  },
+  modalOverlay: {
+    position: 'fixed',
+    top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    width: '850px',
+    maxHeight: '85vh',
+    borderRadius: '16px',
+    padding: '24px',
+    display: 'flex',
+    flexDirection: 'column',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)'
   }
 };
 
@@ -155,6 +174,10 @@ function ChunkingPage() {
   const [leftWidth, setLeftWidth] = useState(50); 
   const [isResizing, setIsResizing] = useState(false);
   const wrapperRef = useRef(null);
+
+  // 🪄 AI 자동 청킹 미리보기 팝업 모달 상태
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [previewChunks, setPreviewChunks] = useState([]);
 
   // Ctrl + Z 실행 취소
   const saveToHistory = (currentLines) => {
@@ -224,34 +247,88 @@ function ChunkingPage() {
     }
   };
 
-const handleAutoMarkdownSplit = async () => {
+  // 🎯 단일 지정 및 Ctrl + 클릭 시 동일 등급 패턴 전체 일괄 변환 핸들러
+  const handleSetLineMarkdownLevel = (lineIndex, targetLevel, isBatch = false) => {
+    saveToHistory(lines);
+
+    let targetPattern = null;
+    if (isBatch) {
+      const baseLine = lines.find(l => l.line_index === lineIndex);
+      if (baseLine && baseLine.text) {
+        const clean = baseLine.text.replace(/^#+\s*/, '').replace(/^-\s*/, '').replace(/\*\*/g, '').trim();
+        if (/^\d+\.\d+\.\d+\s+/.test(clean)) targetPattern = 'H3';
+        else if (/^\d+\.\d+\s+/.test(clean)) targetPattern = 'H2';
+        else if (/^\d+\s+[가-힣A-Za-z]/.test(clean)) targetPattern = 'H1';
+      }
+    }
+
+    setLines(prevLines => 
+      prevLines.map(line => {
+        let text = line.text ? line.text.trim() : "";
+        const cleanText = text.replace(/^#+\s*/, '').replace(/^-\s*/, '').replace(/\*\*/g, '').trim();
+
+        const isTarget = (line.line_index === lineIndex) || (isBatch && targetPattern && (
+          (targetPattern === 'H3' && /^\d+\.\d+\.\d+\s+/.test(cleanText)) ||
+          (targetPattern === 'H2' && /^\d+\.\d+\s+/.test(cleanText) && !/^\d+\.\d+\.\d+/.test(cleanText)) ||
+          (targetPattern === 'H1' && /^\d+\s+[가-힣A-Za-z]/.test(cleanText) && !/^\d+\.\d+/.test(cleanText))
+        ));
+
+        if (isTarget) {
+          if (targetLevel === 0) {
+            return { ...line, text: cleanText };
+          }
+          let prefix = '# ';
+          if (targetLevel === 2) prefix = '## ';
+          if (targetLevel === 3) prefix = '### ';
+
+          return { ...line, text: `${prefix}${cleanText}` };
+        }
+        return line;
+      })
+    );
+  };
+
+  // 🪄 [정제 완료]: 랭체인 MD 스플리터로 분할 요청 후 미리보기 팝업 오픈
+  const handleAutoMarkdownSplit = async () => {
     if (!lines || lines.length === 0) {
       alert("분할할 텍스트 라인이 존재하지 않습니다.");
       return;
     }
 
-    const confirmRun = window.confirm(
-      "🪄 AI 마크다운 헤더를 복원하여 자동 청킹을 수행하시겠습니까?"
-    );
-    if (!confirmRun) return;
-
     try {
-      saveToHistory(lines);
+      const response = await splitMarkdownApi({ lines });
+      const chunks = response.chunks || [];
 
-      const response = await splitMarkdownApi(lines);
-      const updatedLines = response.lines || [];
-
-      if (updatedLines.length === 0) {
-        alert("변환된 데이터가 없습니다.");
+      if (chunks.length === 0) {
+        alert("분할된 청크 결과가 없습니다.");
         return;
       }
 
-      // 상위 헤더 라인이 포함된 새로운 라인 배열로 화면 갱신
-      setLines(updatedLines);
-
-      alert(`✨ 상위 헤더 복원 및 자동 청킹이 완료되었습니다!`);
+      setPreviewChunks(chunks);
+      setPreviewModalOpen(true);
     } catch (err) {
       alert(err.message || "자동 마크다운 분할 중 오류가 발생했습니다.");
+    }
+  };
+
+  // 💾 [최종 확인 후 적재]: 기존 save-chunks 포맷(page_no, text)에 맞춰 웹훅 전송
+  const handleConfirmAndSave = async () => {
+    try {
+      const formattedPayloadChunks = previewChunks.map(chunk => ({
+        page_no: String(chunk.page_number || chunk.page_no || "1"),
+        text: chunk.raw_content || chunk.clean_text || ""
+      }));
+
+      const data = await saveChunksApi(globalPrefix.trim(), formattedPayloadChunks);
+      alert(data.message || "저장되었습니다.");
+      setPreviewModalOpen(false);
+      setStep('upload');
+      setPdfFile(null);
+      setActivePage(1);
+      setGlobalPrefix('');
+      setLinesHistory([]);
+    } catch (err) {
+      alert(err.message || "저장 중 오류가 발생했습니다.");
     }
   };
 
@@ -268,11 +345,6 @@ const handleAutoMarkdownSplit = async () => {
       setNumPages(null);
       setActivePage(1);
     }
-  };
-
-  const toggleSplit = (index) => {
-    saveToHistory(lines);
-    setLines(prev => prev.map((line, i) => i === index ? { ...line, is_split_point: !line.is_split_point } : line));
   };
 
   const deleteLine = (lineIndexToDelete) => {
@@ -295,18 +367,14 @@ const handleAutoMarkdownSplit = async () => {
       const pageMap = new Map();
       prevLines.forEach(line => {
         const pageNum = line.page_number || 1;
-        if (!pageMap.has(pageNum)) {
-          pageMap.set(pageNum, []);
-        }
+        if (!pageMap.has(pageNum)) pageMap.set(pageNum, []);
         pageMap.get(pageNum).push(line);
       });
 
       const filteredLines = [];
       pageMap.forEach((pageLines) => {
-        const remaining = pageLines.slice(topCount);
-        filteredLines.push(...remaining);
+        filteredLines.push(...pageLines.slice(topCount));
       });
-
       return filteredLines;
     });
   };
@@ -319,37 +387,17 @@ const handleAutoMarkdownSplit = async () => {
       const pageMap = new Map();
       prevLines.forEach(line => {
         const pageNum = line.page_number || 1;
-        if (!pageMap.has(pageNum)) {
-          pageMap.set(pageNum, []);
-        }
+        if (!pageMap.has(pageNum)) pageMap.set(pageNum, []);
         pageMap.get(pageNum).push(line);
       });
 
       const filteredLines = [];
       pageMap.forEach((pageLines) => {
         const remainingCount = Math.max(0, pageLines.length - bottomCount);
-        const remaining = pageLines.slice(0, remainingCount);
-        filteredLines.push(...remaining);
+        filteredLines.push(...pageLines.slice(0, remainingCount));
       });
-
       return filteredLines;
     });
-  };
-
-  const insertLineAbove = (index, currentLine) => {
-    saveToHistory(lines);
-    const newId = Date.now() + Math.random(); 
-    const newLineObj = {
-      line_index: `custom_${newId}`,
-      text: currentLine ? currentLine.text : "", 
-      is_split_point: false,
-      is_deleted: false,
-      page_number: currentLine ? currentLine.page_number : activePage
-    };
-    
-    const newLines = [...lines];
-    newLines.splice(index, 0, newLineObj);
-    setLines(newLines);
   };
 
   const handleTextChange = (lineIndex, newText) => {
@@ -358,20 +406,6 @@ const handleAutoMarkdownSplit = async () => {
         line.line_index === lineIndex ? { ...line, text: newText } : line
       )
     );
-  };
-
-  const handleSave = async () => {
-    try {
-      const data = await saveChunksApi(globalPrefix.trim(), lines);
-      alert(data.message || "저장되었습니다.");
-      setStep('upload');
-      setPdfFile(null);
-      setActivePage(1);
-      setGlobalPrefix('');
-      setLinesHistory([]);
-    } catch (err) {
-      alert("저장 중 오류가 발생했습니다.");
-    }
   };
 
   return (
@@ -452,17 +486,63 @@ const handleAutoMarkdownSplit = async () => {
                 activePage={activePage}
                 setActivePage={setActivePage}
                 handleTextChange={handleTextChange}
-                insertLineAbove={insertLineAbove}
                 deleteLine={deleteLine}
                 deletePageLines={deletePageLines}
-                chunkByPage={handleAutoMarkdownSplit} // 👈 에디터 내부 버튼에 AI 자동 청킹 함수 연결
+                chunkByPage={handleAutoMarkdownSplit}
                 deleteTopNLinesPerPage={deleteTopNLinesPerPage}
                 deleteBottomNLinesPerPage={deleteBottomNLinesPerPage}
-                toggleSplit={toggleSplit}
-                handleSave={handleSave}
+                handleSave={handleAutoMarkdownSplit} // 정제 완료 버튼 연동
+                onSetLineMarkdownLevel={handleSetLineMarkdownLevel} 
               />
             </div>
           </>
+        )}
+
+        {/* 🪄 랭체인 분할 결과 미리보기 팝업 모달 */}
+        {previewModalOpen && (
+          <div style={styles.modalOverlay}>
+            <div style={styles.modalContent}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, fontSize: '18px', fontWeight: '900', color: '#0f172a' }}>
+                  ✨ AI 자동 청킹(MD Split) 미리보기 결과 (총 {previewChunks.length}개 청크)
+                </h3>
+                <button 
+                  onClick={() => setPreviewModalOpen(false)}
+                  style={{ border: 'none', background: 'none', fontSize: '18px', cursor: 'pointer' }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div style={{ flex: 1, overflowY: 'auto', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                {previewChunks.map((chunk) => (
+                  <div key={chunk.chunk_index} style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '12px', marginBottom: '10px' }}>
+                    <div style={{ fontSize: '12px', fontWeight: '800', color: '#2563eb', marginBottom: '4px' }}>
+                      [Chunk #{chunk.chunk_index}] (구성 라인 수: {chunk.line_count}줄)
+                    </div>
+                    <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: '13px', color: '#334155' }}>
+                      {chunk.clean_text}
+                    </pre>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+                <button 
+                  onClick={() => setPreviewModalOpen(false)}
+                  style={{ padding: '10px 16px', backgroundColor: '#f1f5f9', color: '#475569', border: '1px solid #cbd5e1', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  취소 및 돌아가기
+                </button>
+                <button 
+                  onClick={handleConfirmAndSave}
+                  style={{ padding: '10px 20px', backgroundColor: '#2563eb', color: '#ffffff', border: 'none', borderRadius: '8px', fontWeight: '700', cursor: 'pointer' }}
+                >
+                  💾 최종 확인 및 지식 DB 적재하기
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

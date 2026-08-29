@@ -26,92 +26,86 @@ def strip_markdown(text_content: str) -> str:
     lines = [line.strip() for line in text_content.split('\n') if line.strip()]
     return "\n".join(lines)
 
-
 @router.post("/chunking/markdown-split")
 def split_markdown_text(data: dict):
+    """
+    🎯 계단식 분할 시 상위 헤더 메타데이터가 유실되지 않도록 완벽하게 누적 병합하는 스플리터
+    """
     lines_payload = data.get("lines", [])
-    text = data.get("text", "")
     
-    if not lines_payload and text:
-        lines_payload = [{"text": line, "page_number": 1} for line in text.split('\n') if line.strip()]
+    if not lines_payload:
+        return {"status": "success", "chunks": []}
 
-    full_text = "\n".join([item.get("text", "") for item in lines_payload])
+    active_lines = [item for item in lines_payload if not item.get("is_deleted", False)]
+    full_text = "\n".join([item.get("text", "") for item in active_lines])
     
-    headers_to_split_on = [
-        ("#", "Header 1"),
-        ("##", "Header 2"),
-        ("###", "Header 3"),
-        ("####", "Header 4"),
-    ]
-    splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers_to_split_on)
-    splits = splitter.split_text(full_text)
-    
-    new_response_lines = []
-    global_idx = 0
-    current_search_idx = 0
-    
-    for idx, split in enumerate(splits):
-        metadata = split.metadata
-        content = split.page_content
+    def cascading_split(text: str, level: int, inherited_metadata: dict) -> list:
+        if not text.strip():
+            return []
+            
+        if level == 1:
+            headers = [("#", "Header 1")]
+        elif level == 2:
+            headers = [("#", "Header 1"), ("##", "Header 2")]
+        else:
+            headers = [("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3")]
+            
+        splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
+        splits = splitter.split_text(text)
         
-        # 1. 현재 청크에 속한 상위 헤더들을 라인으로 생성
-        header_lines_to_add = []
-        for header_key in ["Header 1", "Header 2", "Header 3", "Header 4"]:
+        if not splits:
+            return [(inherited_metadata, text)]
+        
+        refined_splits = []
+        for split in splits:
+            content = split.page_content
+            # 현재 스플릿에서 나온 메타데이터와 상위에서 물려받은 메타데이터를 병합합니다.
+            current_metadata = {**inherited_metadata, **split.metadata}
+            
+            if len(content) > 500 and level < 3:
+                sub_splits = cascading_split(content, level + 1, current_metadata)
+                refined_splits.extend(sub_splits)
+            else:
+                refined_splits.append((current_metadata, content))
+                
+        return refined_splits
+
+    # 초기 빈 메타데이터로 계단식 분할 시작
+    raw_splits = cascading_split(full_text, level=1, inherited_metadata={})
+    
+    preview_chunks = []
+    for idx, (metadata, content) in enumerate(raw_splits):
+        header_lines = []
+        # Header 1, Header 2, Header 3 순서대로 상위 타이틀을 조립합니다.
+        for header_key in ["Header 1", "Header 2", "Header 3"]:
             if header_key in metadata:
-                level = header_key[-1]
-                hashes = "#" * int(level)
-                header_text = f"{hashes} {metadata[header_key]}"
-                header_lines_to_add.append(header_text)
+                level_num = header_key.split()[-1]
+                hashes = "#" * int(level_num)
+                header_lines.append(f"{hashes} {metadata[header_key]}")
         
-        # 상위 헤더 추가 (페이지 번호는 현재 검색 중인 원본 라인의 페이지 번호 상속)
-        current_page = 1
-        if current_search_idx < len(lines_payload):
-            current_page = lines_payload[current_search_idx].get("page_number", 1)
-
-        for h_text in header_lines_to_add:
-            new_response_lines.append({
-                "line_index": f"header_{global_idx}",
-                "text": h_text,
-                "is_split_point": False,
-                "is_deleted": False,
-                "page_number": current_page,
-                "source_filename": lines_payload[0].get("source_filename", "") if lines_payload else ""
-            })
-            global_idx += 1
-
-        # 2. 본문 내용 라인 처리 및 마지막 줄 절단선(is_split_point) 매핑
         content_lines = [l.strip() for l in content.split('\n') if l.strip()]
         
-        for c_idx, c_line in enumerate(content_lines):
-            is_last = (c_idx == len(content_lines) - 1)
-            
-            # 원본 라인에서 해당 텍스트를 찾아 원래의 page_number와 line_index를 최대한 유지
-            matched_page = current_page
-            matched_line_idx = f"content_{global_idx}"
-            
-            found_original = False
-            for i in range(current_search_idx, len(lines_payload)):
-                orig_text = lines_payload[i].get("text", "").strip()
-                if orig_text == c_line or c_line in orig_text:
-                    matched_page = lines_payload[i].get("page_number", current_page)
-                    matched_line_idx = lines_payload[i].get("line_index", f"content_{global_idx}")
-                    current_search_idx = i + 1
-                    found_original = True
-                    break
-            
-            new_response_lines.append({
-                "line_index": matched_line_idx,
-                "text": c_line,
-                "is_split_point": is_last, # 청크의 마지막 줄에 정확히 절단선 지정
-                "is_deleted": False,
-                "page_number": int(matched_page),
-                "source_filename": lines_payload[0].get("source_filename", "") if lines_payload else ""
+        # 본문 내용 내부에 이미 동일한 헤더가 포함되어 있는 경우 중복 추가를 방지합니다.
+        filtered_content_lines = []
+        for line in content_lines:
+            if not any(line == hl for hl in header_lines):
+                filtered_content_lines.append(line)
+
+        chunk_lines = header_lines + filtered_content_lines
+        chunk_text_raw = "\n".join(chunk_lines)
+        clean_plain_text = strip_markdown(chunk_text_raw)
+        
+        if clean_plain_text:
+            preview_chunks.append({
+                "chunk_index": idx + 1,
+                "raw_content": chunk_text_raw,
+                "clean_text": clean_plain_text,
+                "line_count": len(chunk_lines)
             })
-            global_idx += 1
 
     return {
         "status": "success",
-        "lines": new_response_lines
+        "chunks": preview_chunks
     }
 
 @router.post("/upload-pdf")
@@ -155,7 +149,6 @@ async def upload_pdf(
                 response_data.append({
                     "line_index": str(global_line_idx),
                     "text": clean_line,
-                    "is_split_point": False,
                     "is_deleted": False,
                     "page_number": int(current_page_num),
                     "source_filename": file.filename,
@@ -191,54 +184,22 @@ async def save_chunks(request: Request):
             raise HTTPException(status_code=400, detail="전송할 청크 데이터가 존재하지 않습니다.")
 
         formatted_chunks = []
-        current_chunk_buffer = []
-        chunk_page_start = None
-        chunk_page_end = None
+        for item in raw_chunks:
+            chunk_text = item.get("text") or item.get("clean_text") or item.get("raw_content", "")
+            page_no_str = str(item.get("page_no") or item.get("page_number") or "1")
 
-        for idx, item in enumerate(raw_chunks):
-            item_text = item.get("text", "") if isinstance(item, dict) else getattr(item, "text", "")
-            is_deleted = item.get("is_deleted", False) if isinstance(item, dict) else getattr(item, "is_deleted", False)
-            is_split_point = item.get("is_split_point", False) if isinstance(item, dict) else getattr(item, "is_split_point", False)
+            clean_plain_text = strip_markdown(chunk_text)
+            clean_prefix = strip_markdown(global_prefix)
             
-            raw_page = item.get("page_number") or item.get("page_no") if isinstance(item, dict) else 1
-            try:
-                page_number = int(raw_page)
-            except (ValueError, TypeError):
-                page_number = 1
+            if clean_prefix:
+                final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
+            else:
+                final_text = clean_plain_text
 
-            if is_deleted:
-                continue
-
-            if chunk_page_start is None:
-                chunk_page_start = page_number
-            chunk_page_end = page_number
-
-            current_chunk_buffer.append(item_text)
-
-            if is_split_point or idx == len(raw_chunks) - 1:
-                raw_markdown_content = "\n".join(current_chunk_buffer).strip()
-
-                if raw_markdown_content:
-                    clean_plain_text = strip_markdown(raw_markdown_content)
-                    clean_prefix = strip_markdown(global_prefix)
-                    if clean_prefix:
-                        final_text = f"[{clean_prefix}]\n\n{clean_plain_text}"
-                    else:
-                        final_text = clean_plain_text
-
-                    if chunk_page_start == chunk_page_end:
-                        page_no_str = str(chunk_page_start)
-                    else:
-                        page_no_str = f"{chunk_page_start}~{chunk_page_end}"
-
-                    formatted_chunks.append({
-                        "page_no": page_no_str,
-                        "text": final_text
-                    })
-
-                current_chunk_buffer = []
-                chunk_page_start = None
-                chunk_page_end = None
+            formatted_chunks.append({
+                "page_no": page_no_str,
+                "text": final_text
+            })
 
         saved_config = get_config()
         target_url = body.get("target_api_url") or saved_config.get("target_api_url")
