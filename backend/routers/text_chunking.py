@@ -74,77 +74,115 @@ def strip_markdown(text_content: str) -> str:
 @router.post("/chunking/markdown-split")
 def split_markdown_text(data: dict):
     """
-    🎯 계단식 분할 시 상위 헤더 메타데이터가 유실되지 않도록 완벽하게 누적 병합하는 스플리터
+    🎯 계단식(Cascading) 분할 시 각 레벨(H1, H2, H3)별로
+       본문이 없는 빈 헤더 구간에만 동적으로 '[내용없음]'을 주입하여
+       LangChain의 청크 유실을 방지하고 최종적으로 정제하는 스플리터
     """
     lines_payload = data.get("lines", [])
-    
     if not lines_payload:
         return {"status": "success", "chunks": []}
 
     active_lines = [item for item in lines_payload if not item.get("is_deleted", False)]
-    full_text = "\n".join([item.get("text", "") for item in active_lines])
-    
+    raw_lines = [item.get("text", "").rstrip() for item in active_lines if item.get("text", "").strip()]
+    full_text = "\n".join(raw_lines)
+
+    PLACEHOLDER = "[내용없음]"
+
+    # 💡 현재 분할 레벨에 맞춰 본문이 비어 있는 헤더 뒤에만 마커를 주입하는 함수
+    def inject_placeholder_for_level(text: str, level: int) -> str:
+        lines = text.split("\n")
+        result = []
+
+        # 레벨별 감지 대상 헤더 정규식
+        # level 1: H1(#)
+        # level 2: H2(##)
+        # level 3: H3(###)
+        target_pattern = rf"^#{'{' + str(level) + '}'}\s+"
+
+        # 해당 레벨 분할을 종결짓는 후속 헤더 패턴 (자신 레벨 이하의 헤더들)
+        # level 1이면 다음이 H1(#)일 때 빈 것으로 판단
+        # level 2이면 다음이 H1(#) 또는 H2(##)일 때 빈 것으로 판단
+        # level 3이면 다음이 H1(#), H2(##), H3(###)일 때 빈 것으로 판단
+        terminator_pattern = rf"^#{{1,{level}}}\s+"
+
+        for i, line in enumerate(lines):
+            result.append(line)
+            if re.match(target_pattern, line):
+                has_next = (i + 1 < len(lines))
+                # 다음 라인이 없거나, 다음 라인이 바로 상위/동급 헤더인 경우 본문 누락으로 간주
+                next_is_empty_boundary = (not has_next) or bool(re.match(terminator_pattern, lines[i + 1]))
+                if next_is_empty_boundary:
+                    result.append(PLACEHOLDER)
+
+        return "\n".join(result)
+
     def cascading_split(text: str, level: int, inherited_metadata: dict) -> list:
         if not text.strip():
             return []
-            
+
+        # 1. 현재 레벨 기준 빈 헤더 뒤에 [내용없음] 동적 보정
+        prepared_text = inject_placeholder_for_level(text, level)
+
         if level == 1:
             headers = [("#", "Header 1")]
         elif level == 2:
             headers = [("#", "Header 1"), ("##", "Header 2")]
         else:
             headers = [("#", "Header 1"), ("##", "Header 2"), ("###", "Header 3")]
-            
+
         splitter = MarkdownHeaderTextSplitter(headers_to_split_on=headers)
-        splits = splitter.split_text(text)
-        
+        splits = splitter.split_text(prepared_text)
+
         if not splits:
             return [(inherited_metadata, text)]
-        
+
         refined_splits = []
         for split in splits:
             content = split.page_content
-            # 현재 스플릿에서 나온 메타데이터와 상위에서 물려받은 메타데이터를 병합합니다.
             current_metadata = {**inherited_metadata, **split.metadata}
-            
+
+            # 본문 길이가 500자를 넘어가면 하위 헤더 기준으로 재귀 분할
             if len(content) > 500 and level < 3:
                 sub_splits = cascading_split(content, level + 1, current_metadata)
-                refined_splits.extend(sub_splits)
+                if sub_splits:
+                    refined_splits.extend(sub_splits)
+                else:
+                    refined_splits.append((current_metadata, content))
             else:
                 refined_splits.append((current_metadata, content))
-                
+
         return refined_splits
 
-    # 초기 빈 메타데이터로 계단식 분할 시작
+    # 계단식 분할 수행 (Level 1부터 시작)
     raw_splits = cascading_split(full_text, level=1, inherited_metadata={})
-    
+
     preview_chunks = []
-    for idx, (metadata, content) in enumerate(raw_splits):
+    for metadata, content in raw_splits:
+        # 헤더 조립
         header_lines = []
-        # Header 1, Header 2, Header 3 순서대로 상위 타이틀을 조립합니다.
         for header_key in ["Header 1", "Header 2", "Header 3"]:
-            if header_key in metadata:
+            if header_key in metadata and metadata[header_key]:
                 level_num = header_key.split()[-1]
                 hashes = "#" * int(level_num)
                 header_lines.append(f"{hashes} {metadata[header_key]}")
+
+        # 💡 [내용없음] 더미 텍스트 제거 및 본문 라인 정리
+        cleaned_content = content.replace(PLACEHOLDER, "").strip()
+        content_lines = [l.strip() for l in cleaned_content.split("\n") if l.strip()]
         
-        content_lines = [l.strip() for l in content.split('\n') if l.strip()]
-        
-        # 본문 내용 내부에 이미 동일한 헤더가 포함되어 있는 경우 중복 추가를 방지합니다.
-        filtered_content_lines = []
-        for line in content_lines:
-            if not any(line == hl for hl in header_lines):
-                filtered_content_lines.append(line)
+        # 헤더와 중복되는 라인 제외
+        filtered_content_lines = [l for l in content_lines if l not in header_lines]
 
         chunk_lines = header_lines + filtered_content_lines
         chunk_text_raw = "\n".join(chunk_lines)
         clean_plain_text = strip_markdown(chunk_text_raw)
-        
-        if clean_plain_text:
+
+        # 헤더만 남아 본문이 없더라도 청크로 온전히 보존
+        if chunk_text_raw.strip():
             preview_chunks.append({
-                "chunk_index": idx + 1,
+                "chunk_index": len(preview_chunks) + 1,
                 "raw_content": chunk_text_raw,
-                "clean_text": clean_plain_text,
+                "clean_text": clean_plain_text if clean_plain_text.strip() else chunk_text_raw,
                 "line_count": len(chunk_lines)
             })
 
